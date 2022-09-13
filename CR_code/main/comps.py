@@ -25,8 +25,13 @@ pd.set_option("display.max_columns", None)
 pd.set_option("display.max_rows", 20)
 
 import sys
-path_read = 'I:/GESTAO/5) Produtos/5.2) Fundos Abertos/5.2.3) Ranking'
-sys.path.insert(1, path_read+'/FI_code/formulas')
+import os
+import inspect
+
+parent_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))))
+sys.path.append(parent_path+'/Comps_code/formulas')
+
+
 from  fund_prices_database import fund_prices_database
 from  index_prices_database import index_prices_database
 from drawdown import event_drawdown, max_drawdown
@@ -37,7 +42,7 @@ from moving_window import moving_window
 
 fund_universe = "Funds List"
 
-excel_path = path_read + '/Comparables - MM.xlsx'
+excel_path = parent_path + '/Comparables.xlsx'
 
 funds_list = pd.read_excel(excel_path, sheet_name = fund_universe).iloc[2:,1:6].dropna(how='all',axis='columns')
 funds_list = funds_list[(funds_list.iloc[:,3]!="")]
@@ -293,19 +298,6 @@ except:
     wb.save(excel_path)
     wb = openpyxl.load_workbook(excel_path)
 
-'''
-# Print Prices:
-output_sheet = 'Prices'
-data = pd.merge(benchmark, price, right_index=True, left_index=True)
-if not output_sheet in wb.sheetnames:
-    worksheet = wb.create_sheet(output_sheet)
-else: worksheet = wb[output_sheet]
-
-rows = dataframe_to_rows(data, index=True)
-for r_idx, row in enumerate(rows):
-    for c_idx, value in enumerate(row):
-        worksheet.cell(row=r_idx+2, column=c_idx+1, value=value)
-'''
         
 # Print Log Returns:
 output_sheet = 'Log Returns'        
@@ -323,41 +315,7 @@ rows = dataframe_to_rows(data, index=True)
 for r_idx, row in enumerate(rows):
     for c_idx, value in enumerate(row):
         worksheet.cell(row=r_idx+2, column=c_idx+1, value=value)
-        
-# Print Price:
-output_sheet = 'Prices'        
 
-if not output_sheet in wb.sheetnames:
-    worksheet = wb.create_sheet(output_sheet)
-else: worksheet = wb[output_sheet]
-
-for col in range(1, worksheet.max_column): # Delete old data
-    for row in range(1, worksheet.max_row):  
-        worksheet.cell(row=row, column=col).value = None
-
-data = price
-rows = dataframe_to_rows(data, index=True)
-for r_idx, row in enumerate(rows):
-    for c_idx, value in enumerate(row):
-        worksheet.cell(row=r_idx+2, column=c_idx+1, value=value)
-        
-        
-# Print Benchmarks:
-output_sheet = 'Benchmark'        
-
-if not output_sheet in wb.sheetnames:
-    worksheet = wb.create_sheet(output_sheet)
-else: worksheet = wb[output_sheet]
-
-for col in range(1, worksheet.max_column): # Delete old data
-    for row in range(1, worksheet.max_row):  
-        worksheet.cell(row=row, column=col).value = None
-
-data = benchmark
-rows = dataframe_to_rows(data, index=True)
-for r_idx, row in enumerate(rows):
-    for c_idx, value in enumerate(row):
-        worksheet.cell(row=r_idx+2, column=c_idx+1, value=value)
         
 # Print Summary Table:
 output_sheet = 'Ranking'
@@ -376,24 +334,6 @@ for r_idx, row in enumerate(rows):
     for c_idx, value in enumerate(row):
         worksheet.cell(row=r_idx+4, column=c_idx+2, value=value)
 
-'''        
-# Print Percistency Percentile:
-output_sheet = 'Persistency Percentile'        
-
-if not output_sheet in wb.sheetnames:
-    worksheet = wb.create_sheet(output_sheet)
-else: worksheet = wb[output_sheet]
-
-for col in range(1, worksheet.max_column): # Delete old data
-    for row in range(1, worksheet.max_row):  
-        worksheet.cell(row=row, column=col).value = None
-
-data = persistency_perc
-rows = dataframe_to_rows(data, index=True)
-for r_idx, row in enumerate(rows):
-    for c_idx, value in enumerate(row):
-        worksheet.cell(row=r_idx+3, column=c_idx+2, value=value)
-'''    
         
 wb.save(excel_path)
         
