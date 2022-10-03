@@ -4,7 +4,7 @@ save_data_on_exit = True
 save_history = True
 save_non_project_files = False
 project_type = 'empty-project-type'
-recent_files = ['C:\\Users\\eduardo.scheffer\\.spyder-py3\\temp.py', '\\\\bazusvbr001.bswm.local\\dados\\GESTAO\\3) Carteira Recomendada\\Carteira Recomendada\\CR_code\\main\\simulacao_carteira.py', 'CR_code\\formulas\\fund_charact_database.py', 'CR_code\\formulas\\fund_prices_database.py', 'CR_code\\formulas\\index_prices_database.py', 'CR_code\\main\\comps.py', 'CR_code\\formulas\\max_drawdown.py']
+recent_files = ['C:\\Users\\eduardo.scheffer\\.spyder-py3\\temp.py', '\\\\bazusvbr001.bswm.local\\dados\\GESTAO\\3) Carteira Recomendada\\Carteira Recomendada\\CR_code\\main\\simulacao_carteira.py', 'CR_code\\formulas\\fund_prices_database.py', 'CR_code\\formulas\\benchmark_prices_database.py', 'CR_code\\formulas\\fund_charact_database.py', 'CR_code\\formulas\\max_drawdown.py']
 
 [main]
 version = 0.2.0

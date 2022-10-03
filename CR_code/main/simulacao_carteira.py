@@ -9,15 +9,12 @@ Created on Mon Sep 12 15:07:00 2022
 import pandas as pd
 import numpy as np
 import math as math
-
-import pyodbc
-from tqdm import tqdm # progress bar
-import datetime as dt
-
-import datetime as dt
-
+import xlwings as xw
+import win32com.client
 import openpyxl
 from openpyxl.utils.dataframe import dataframe_to_rows
+
+import datetime as dt
 
 #import matplotlib.pyplot as plt
 #import seaborn as sns
@@ -37,38 +34,48 @@ sys.path.append(parent_path+'/CR_code/formulas')
 
 
 from  fund_prices_database import fund_prices_database
-from  fund_charact_database import fund_charact_database
+#from  fund_charact_database import fund_charact_database
 from  benchmark_prices_database import benchmark_prices_database
 from drawdown import event_drawdown, max_drawdown
 from moving_window import moving_window
-#from  fund_prices_cvm import fund_prices_cvm
 
 ''' 2) READ SELECTED FUNDS ------------------------------------------------------------------------------------''' 
 
 sheet_portfolio = "Portfólio Sugerido"
-
+    
 excel_path = parent_path + '/Carteira Recomendada.xlsm'
 wb = openpyxl.load_workbook(excel_path, data_only=True)
 worksheet = wb[sheet_portfolio]
-date_first = worksheet['AB5'].value
-date_last = worksheet['AB7'].value
+date_first = worksheet['AB2'].value
+date_last = worksheet['AB3'].value
 
-portfolio = pd.read_excel(excel_path, sheet_name = sheet_portfolio, header=1).iloc[8:,2:].dropna(how='all',axis=0).dropna(how='all',axis=1) 
-portfolio = portfolio[(portfolio.iloc[:,0].isna()) & (portfolio.iloc[:,1].isna())].iloc[:,2:] # Delete assets classes
+portfolio = pd.read_excel(excel_path, sheet_name = sheet_portfolio, header=1).iloc[4:,2:].dropna(how='all',axis=0).dropna(how='all',axis=1) 
+portfolio = portfolio.dropna(how='all',axis=0).iloc[:-1,:] # Delete TOTAL line and beyond
 portfolio = portfolio.rename(columns=portfolio.iloc[0]).iloc[1:,:] # Turn first row into column headers
-portfolio = portfolio[['Ativo','CNPJ', 'R$', '% do PL', 'Benchmark', '% Benchmark', 'Benchmark +', 'Liquidez (D+)']]
+portfolio.reset_index(inplace=True,drop=True)
 portfolio['R$'] = portfolio['R$'].astype(float)
 portfolio['% do PL'] = portfolio['% do PL'].astype(float)
 portfolio['Benchmark +'] = portfolio['Benchmark +'].astype(float)
+portfolio['Benchmark +'] = portfolio['% Benchmark'].astype(float)
 portfolio['Ativo'] = portfolio['Ativo'].astype(str)
 
-portfolio.rename(columns={'Liquidez (D+)':'Liq RF'}, inplace=True)
+classe = ""
+estrategia = ""
+for i in range(portfolio.shape[0]):
+    if portfolio.iloc[i,1] == "y":
+        classe = portfolio.iloc[i,2]
+    if portfolio.iloc[i,0] == "x" and portfolio.iloc[i,1] == "x":
+        estrategia = portfolio.iloc[i,2]
+    else:
+        portfolio._set_value(i,'Classe', classe)
+        portfolio._set_value(i,'Estratégia', estrategia)
 
-benchmark_list = ['CDI','SELIC', 'Ibovespa','IHFA','IPCA','IMA-B','IMA-B 5', 'PTAX', 'SP500', 'Prévia IPCA']
+portfolio = portfolio[['Ativo','CNPJ', 'R$', '% do PL', 'Benchmark', '% Benchmark', 'Benchmark +', 'Liquidez (D+)', 'Classe', 'Estratégia']]
 
-
+#portfolio.rename(columns={'Liquidez (D+)':'Liq RF'}, inplace=True)
 #funds_name = list(funds_list.iloc[:,0:1].to_numpy().flatten())
 
+benchmark_list = ['CDI','SELIC', 'Ibovespa','IHFA','IPCA','IMA-B','IMA-B 5', 'PTAX', 'SP500', 'Prévia IPCA']
 
 cnpj_list = list(portfolio[(portfolio['CNPJ']!="-")]['CNPJ'].to_numpy().flatten().astype(float))
 
@@ -78,30 +85,32 @@ cnpj_list = list(portfolio[(portfolio['CNPJ']!="-")]['CNPJ'].to_numpy().flatten(
 benchmark_prices = benchmark_prices_database(benchmark_list, date_first, date_last)
 fund_prices = fund_prices_database(cnpj_list, date_first, date_last)  
 
-fund_charact = fund_charact_database(cnpj_list) 
-
-portfolio = pd.merge(portfolio, fund_charact, how='outer', on='CNPJ')
-portfolio.rename(columns={'ClasseBSide':'Classe'}, inplace=True)
+#fund_charact = fund_charact_database(cnpj_list) 
+#portfolio = pd.merge(portfolio, fund_charact, how='outer', on='CNPJ')
+#portfolio.rename(columns={'ClasseBSide':'Classe'}, inplace=True)
 
 ''' 4) MANIPULATE CATHEGORICAL COLUMNS ------------------------------------------------------------------------------------------------------------'''
 
-# FX and geography
-portfolio['Moeda'] = portfolio['Moeda'].fillna('BRL')
-portfolio.loc[(portfolio['CNPJ']!="-"), 'Geografia'] = 'Global' # Se for fundo, assume exposição global
-portfolio['Geografia'] = portfolio['Geografia'].fillna('Brasil') # Se for RF, assume exposição Brasil
+## FX and geography
+#portfolio['Moeda'] = portfolio['Moeda'].fillna('BRL')
+#portfolio.loc[(portfolio['CNPJ']!="-"), 'Geografia'] = 'Global' # Se for fundo, assume exposição global
+#portfolio['Geografia'] = portfolio['Geografia'].fillna('Brasil') # Se for RF, assume exposição Brasil
 
-# Class
-portfolio.loc[(portfolio['Ativo'].str.contains('Título', regex=False)),'Classe'] = 'Renda Fixa'
-portfolio.loc[(portfolio['Ativo'].str.contains('NTN', regex=False)),'Classe'] = 'Renda Fixa'
-portfolio.loc[(portfolio['Ativo'].str.contains('LFT', regex=False)),'Classe'] = 'Renda Fixa'
+## Class
+#portfolio.loc[(portfolio['Ativo'].str.contains('Título', regex=False)),'Classe'] = 'Renda Fixa'
+#portfolio.loc[(portfolio['Ativo'].str.contains('NTN', regex=False)),'Classe'] = 'Renda Fixa'
+#portfolio.loc[(portfolio['Ativo'].str.contains('LFT', regex=False)),'Classe'] = 'Renda Fixa'
 
-# Strategy
-portfolio.loc[(portfolio['Ativo'].str.contains('CDI', regex=True)), 'Estratégia'] = 'Pós-fixado'
-portfolio.loc[(portfolio['Ativo'].str.contains('IPCA', regex=True)), 'Estratégia'] = 'Inflação'
-portfolio['Estratégia'] = portfolio['Estratégia'].fillna('Pré-fixado')
+## Strategy
+#portfolio.loc[(portfolio['Ativo'].str.contains('CDI', regex=True)), 'Estratégia'] = 'Pós-fixado'
+#portfolio.loc[(portfolio['Ativo'].str.contains('IPCA', regex=True)), 'Estratégia'] = 'Inflação'
+#portfolio['Estratégia'] = portfolio['Estratégia'].fillna('Pré-fixado')
+
+## FI Liquidity
+#portfolio.loc[(portfolio['CNPJ'] == "-"), 'Liquidez (D+)'] = portfolio[(portfolio['CNPJ'] == "-")]['Liq RF']
+#portfolio = portfolio.drop(['Liq RF'], axis = 1)
 
 # FI Rates end benchmark
-
 portfolio.loc[((portfolio['Ativo'].str.contains('CDI', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'CDI'
 portfolio.loc[((portfolio['Ativo'].str.contains('IPCA', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'IPCA'
 
@@ -110,10 +119,6 @@ portfolio.loc[((portfolio['Ativo'].str.contains(' CDI', regex=True)) & (portfoli
 portfolio.loc[((portfolio['CNPJ'] == "-") & (portfolio['% Benchmark'].isna())), 'Benchmark +'] = portfolio[((~portfolio['Ativo'].str.contains(' CDI', regex=True)) & (portfolio['CNPJ'] == "-"))]['Rates']
 
 portfolio = portfolio.drop(['Rates'], axis = 1)
-
-# FI Liquidity
-portfolio.loc[(portfolio['CNPJ'] == "-"), 'Liquidez (D+)'] = portfolio[(portfolio['CNPJ'] == "-")]['Liq RF']
-portfolio = portfolio.drop(['Liq RF'], axis = 1)
 
 
 ''' 5) GET INDEX DAILY RETURNS --------------------------------------------------------------------------------------------------------------------------------'''
@@ -141,6 +146,7 @@ benchmark_IPCA.loc[:,'IPCA'] = np.log(benchmark_IPCA.loc[:,'IPCA'].astype('float
 benchmark_IPCA = benchmark_IPCA.dropna()
 
 benchmark_index = list(benchmark_lnReturns.index)
+#Something's wrong below:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 benchmark_lnReturns = pd.merge(benchmark_lnReturns, benchmark_IPCA, how="left", on=['IPCA_m/yyyy'])
 benchmark_lnReturns.index = list(benchmark_index)
 benchmark_lnReturns.loc[:,'IPCA_x'] = benchmark_lnReturns.loc[:,'IPCA_y']
@@ -151,6 +157,7 @@ benchmark_lnReturns.loc[:,'IPCA'] = (1+benchmark_lnReturns.loc[:,'IPCA'].astype(
 benchmark_lnReturns['IPCA'] = benchmark_lnReturns['IPCA'].fillna(benchmark_lnReturns['Prévia IPCA'].iat[-1]) # Assume IPCA for the month yet to be calculated is equal to last forecast "Prévia IPCA"
 
 benchmark_lnReturns = benchmark_lnReturns[(benchmark_lnReturns.index >= date_first)] 
+
 
 # Delete weekends/holidays (based on nan in CDI column):
 
