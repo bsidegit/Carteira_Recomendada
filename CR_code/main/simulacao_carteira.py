@@ -72,8 +72,6 @@ for i in range(portfolio.shape[0]):
 
 portfolio = portfolio[['Ativo','CNPJ', 'R$', '% do PL', 'Benchmark', '% Benchmark', 'Benchmark +', 'Liquidez (D+)', 'Classe', 'Estratégia']]
 
-#portfolio.rename(columns={'Liquidez (D+)':'Liq RF'}, inplace=True)
-#funds_name = list(funds_list.iloc[:,0:1].to_numpy().flatten())
 
 benchmark_list = ['CDI','SELIC', 'Ibovespa','IHFA','IPCA','IMA-B','IMA-B 5', 'PTAX', 'SP500', 'Prévia IPCA']
 
@@ -82,33 +80,10 @@ cnpj_list = list(portfolio[(portfolio['CNPJ']!="-")]['CNPJ'].to_numpy().flatten(
 
 ''' 2) IMPORT FUND PRICES --------------------------------------------------------------------------------------'''
 
-benchmark_prices = benchmark_prices_database(benchmark_list, date_first, date_last)
-fund_prices = fund_prices_database(cnpj_list, date_first, date_last)  
+fund_prices = fund_prices_database(cnpj_list, date_first - dt.timedelta(days=62), date_last) # -62 to be able to get IPCA values 
+benchmark_prices = benchmark_prices_database(benchmark_list, date_first - dt.timedelta(days=62), date_last) 
 
-#fund_charact = fund_charact_database(cnpj_list) 
-#portfolio = pd.merge(portfolio, fund_charact, how='outer', on='CNPJ')
-#portfolio.rename(columns={'ClasseBSide':'Classe'}, inplace=True)
-
-''' 4) MANIPULATE CATHEGORICAL COLUMNS ------------------------------------------------------------------------------------------------------------'''
-
-## FX and geography
-#portfolio['Moeda'] = portfolio['Moeda'].fillna('BRL')
-#portfolio.loc[(portfolio['CNPJ']!="-"), 'Geografia'] = 'Global' # Se for fundo, assume exposição global
-#portfolio['Geografia'] = portfolio['Geografia'].fillna('Brasil') # Se for RF, assume exposição Brasil
-
-## Class
-#portfolio.loc[(portfolio['Ativo'].str.contains('Título', regex=False)),'Classe'] = 'Renda Fixa'
-#portfolio.loc[(portfolio['Ativo'].str.contains('NTN', regex=False)),'Classe'] = 'Renda Fixa'
-#portfolio.loc[(portfolio['Ativo'].str.contains('LFT', regex=False)),'Classe'] = 'Renda Fixa'
-
-## Strategy
-#portfolio.loc[(portfolio['Ativo'].str.contains('CDI', regex=True)), 'Estratégia'] = 'Pós-fixado'
-#portfolio.loc[(portfolio['Ativo'].str.contains('IPCA', regex=True)), 'Estratégia'] = 'Inflação'
-#portfolio['Estratégia'] = portfolio['Estratégia'].fillna('Pré-fixado')
-
-## FI Liquidity
-#portfolio.loc[(portfolio['CNPJ'] == "-"), 'Liquidez (D+)'] = portfolio[(portfolio['CNPJ'] == "-")]['Liq RF']
-#portfolio = portfolio.drop(['Liq RF'], axis = 1)
+''' 4) MANIPULATE PORTFOLIO CATHEGORICAL COLUMNS ----------------------------------------------------------------------------------------------------------'''
 
 # FI Rates end benchmark
 portfolio.loc[((portfolio['Ativo'].str.contains('CDI', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'CDI'
@@ -121,45 +96,74 @@ portfolio.loc[((portfolio['CNPJ'] == "-") & (portfolio['% Benchmark'].isna())), 
 portfolio = portfolio.drop(['Rates'], axis = 1)
 
 
-''' 5) GET INDEX DAILY RETURNS --------------------------------------------------------------------------------------------------------------------------------'''
+''' 5) GET ASSETS AND BENCHMARKS DAILY RETURNS --------------------------------------------------------------------------------------------------------------------------------'''
 
 # Fund daily returns:
+fund_prices.fillna(method='ffill', inplace=True)
 fund_lnReturns = np.log(fund_prices.astype('float')) - np.log(fund_prices.astype('float').shift(1))
 fund_lnReturns = fund_lnReturns.iloc[1:,:]
+fund_lnReturns = fund_lnReturns[((fund_lnReturns.index>=date_first) & (fund_lnReturns.index<=date_last))]
 
-#AJUSTAR FERIADOS/FDS NO BRASIL E EUA
-#fund_prices = fund_prices[(~fund_prices['CDI'].isna())] # Delete weekends 
+# Delete weekends and Brazilian holidays
+benchmark_prices.loc[:,'IPCA'].fillna(method='ffill', inplace=True)
+benchmark_prices.loc[:,'SP500'].fillna(method='ffill', inplace=True)
+benchmark_prices = benchmark_prices[(~benchmark_prices['CDI'].isna())]
+# Fill empty prices (different calendars)
+benchmark_prices.fillna(method='ffill', inplace=True)
+benchmark_index = list(benchmark_prices.loc[:,'CDI'].index)
+
+# Get number of workdays
+benchmark_prices['IPCA_m/yyyy'] = [str(i) + "/"+ str(j) for i, j in zip(list(benchmark_prices.index.month), list(benchmark_prices.index.year))] #get new date column
+work_days = benchmark_prices[(~benchmark_prices['CDI'].isna())].groupby(['IPCA_m/yyyy'])['CDI'].count().to_frame() # get work days (DU) for each month
+work_days.rename(columns={'CDI':'DU'}, inplace=True)
+benchmark_prices = pd.merge(benchmark_prices, work_days, how="left", on=['IPCA_m/yyyy'])
+benchmark_prices.index = list(benchmark_index)
+benchmark_prices = benchmark_prices.drop(['IPCA_m/yyyy'], axis = 1)
+
+# Benchmark daily returns given as prices:
+benchmark_lnReturns = np.log(benchmark_prices.astype('float')) - np.log(benchmark_prices.astype('float').shift(1))
+benchmark_lnReturns = benchmark_lnReturns.drop(['DU'], axis = 1)
 
 # CDI, SELIC and Previa IPCA daily returns (given as rates, not prices)
-benchmark_lnReturns = np.log(benchmark_prices.astype('float')) - np.log(benchmark_prices.astype('float').shift(1))
 benchmark_lnReturns.loc[:,'CDI'] = (1+benchmark_prices.loc[:,'CDI'].astype('float')/100)**(1/252)-1
 benchmark_lnReturns.loc[:,'SELIC'] = (1+benchmark_prices.loc[:,'SELIC'].astype('float')/100)**(1/252)-1
-benchmark_lnReturns.loc[:,'Prévia IPCA'] = (1+benchmark_prices.loc[:,'Prévia IPCA'].astype('float')/100)**(1/252)-1
+benchmark_lnReturns.loc[:,'Prévia IPCA'] = (1+benchmark_prices.loc[:,'Prévia IPCA'].astype('float')/100)**(1/benchmark_prices.loc[:, "DU"])-1
 
-# IPCA daily returns (given as rates once a month, and forecasted for last month)
-benchmark_lnReturns['IPCA_m/yyyy'] = [str(i) + "/"+ str(j) for i, j in zip(list(benchmark_lnReturns.index.month), list(benchmark_lnReturns.index.year))]
+# IPCA
+benchmark_lnReturns.loc[:, "IPCA"] = (1+benchmark_lnReturns.loc[:,'IPCA'])**(1/benchmark_prices.loc[:, "DU"])-1 # calculate daily IPCA rates
+benchmark_lnReturns.loc[:, "IPCA"] = benchmark_lnReturns.loc[:, "IPCA"].replace(0,np.nan)
 
-benchmark_IPCA = benchmark_lnReturns.loc[:,['IPCA','IPCA_m/yyyy']]
-benchmark_IPCA.loc[:,'IPCA'] = benchmark_prices['IPCA']
-benchmark_IPCA = benchmark_IPCA.dropna()
-benchmark_IPCA.loc[:,'IPCA'] = np.log(benchmark_IPCA.loc[:,'IPCA'].astype('float')).shift(-1) - np.log(benchmark_IPCA.loc[:,'IPCA'].astype('float'))
-benchmark_IPCA = benchmark_IPCA.dropna()
+# Use forecasted IPCA as missing IPCA
+benchmark_lnReturns['IPCA_m/yyyy'] = [str(i) + "/"+ str(j) for i, j in zip(list(benchmark_lnReturns.index.month), list(benchmark_lnReturns.index.year))] #get new date column
+IPCA_est  = benchmark_lnReturns.loc[:,['Prévia IPCA', 'IPCA_m/yyyy']] # Create dataframe to get last Prévia IPCA
+last_month = list(benchmark_lnReturns.loc[:, "IPCA"].dropna().index)[-1]
+IPCA_est = IPCA_est[(IPCA_est.index > last_month)] # Select only rows greater than last IPCA data
+IPCA_est = IPCA_est[(IPCA_est['IPCA_m/yyyy'] != IPCA_est.iloc[0,1])] # Select only rows of later months
 
+# Get latests forecasts of IPCA
+for aux_index in IPCA_est.index:
+    date_day = aux_index.day
+    if date_day <= 15:
+        date_month = aux_index.month
+        date_year = aux_index.year
+        IPCA_est.loc[aux_index, 'IPCA_m/yyyy'] = str(date_month) + "/"+ str(date_year)
+    else:
+        date_month = (dt.datetime(aux_index.year, aux_index.month, date_day)+ dt.timedelta(days=16)).month
+        date_year = (dt.datetime(aux_index.year, aux_index.month, date_day)+ dt.timedelta(days=16)).year
+        IPCA_est.loc[aux_index, 'IPCA_m/yyyy'] = str(date_month) + "/"+ str(date_year)
+
+IPCA_est = IPCA_est.drop_duplicates(subset=['IPCA_m/yyyy'], keep='last')
 benchmark_index = list(benchmark_lnReturns.index)
-#Something's wrong below:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-benchmark_lnReturns = pd.merge(benchmark_lnReturns, benchmark_IPCA, how="left", on=['IPCA_m/yyyy'])
+benchmark_lnReturns = pd.merge(benchmark_lnReturns, IPCA_est, how="left", on=['IPCA_m/yyyy'])
 benchmark_lnReturns.index = list(benchmark_index)
-benchmark_lnReturns.loc[:,'IPCA_x'] = benchmark_lnReturns.loc[:,'IPCA_y']
-benchmark_lnReturns = benchmark_lnReturns.drop(['IPCA_y','IPCA_m/yyyy' ], axis = 1)
-benchmark_lnReturns.rename(columns={'IPCA_x':'IPCA'}, inplace=True)
+benchmark_lnReturns.loc[~benchmark_lnReturns['Prévia IPCA_y'].isna(),'IPCA'] = benchmark_lnReturns['Prévia IPCA_y'] # Fill missing IPCA with forecasted value
 
-benchmark_lnReturns.loc[:,'IPCA'] = (1+benchmark_lnReturns.loc[:,'IPCA'].astype('float'))**(1/252)-1
-benchmark_lnReturns['IPCA'] = benchmark_lnReturns['IPCA'].fillna(benchmark_lnReturns['Prévia IPCA'].iat[-1]) # Assume IPCA for the month yet to be calculated is equal to last forecast "Prévia IPCA"
+benchmark_lnReturns.fillna(method='ffill', inplace=True)
+benchmark_lnReturns = benchmark_lnReturns.drop(columns = ['IPCA_m/yyyy', 'Prévia IPCA_x', 'Prévia IPCA_y'])
 
-benchmark_lnReturns = benchmark_lnReturns[(benchmark_lnReturns.index >= date_first)] 
+benchmark_lnReturns = benchmark_lnReturns[((benchmark_lnReturns.index>=date_first) & (benchmark_lnReturns.index<=date_last))]
 
-
-# Delete weekends/holidays (based on nan in CDI column):
+''' 6) CALCULATE PORTFOLIO --------------------------------------------------------------------------------------------------------------------------------'''
 
 
 
