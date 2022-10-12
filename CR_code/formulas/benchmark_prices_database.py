@@ -26,10 +26,20 @@ def benchmark_prices_database(benchmark_list, date_first, date_last):
     
     
     indices = pd.read_sql_query("SELECT * FROM Tbl_Indices", con=conn)
-    values_index = pd.read_sql_query("SELECT * FROM Tbl_IndicesValores ORDER BY DtRef ASC", con=conn)
-        
-    dict_map = dict(zip(indices['IdIndice'], indices['NomeIndice']))
     
+    indices = pd.read_sql_query("SELECT * FROM Tbl_Indices", con=conn)
+        
+    index_str = ''
+    for i in list(indices.index):
+        if indices.loc[i, 'NomeIndice'] in benchmark_list:
+            index_str = index_str + 'IdIndice =' + str(indices.loc[i, 'IdIndice']) + ' OR '
+            
+    index_str = index_str[:-3]
+        
+    str_query = "SELECT * FROM Tbl_IndicesValores WHERE ("+index_str+") ORDER BY DtRef ASC"
+
+    values_index = pd.read_sql_query(str_query, con=conn)
+
     values_index = values_index.pivot(index = 'DtRef', columns ='IdIndice' , values = 'Valor')
     
     #-30 to get the IPCA since the first date (monthly data) - these dates will be deleted after obtaining daily IPCA rates
@@ -37,6 +47,7 @@ def benchmark_prices_database(benchmark_list, date_first, date_last):
     values_index = values_index[((values_index.index >= date_first) & (values_index.index <= date_last))]
     
     # Change IdIndice for index name
+    dict_map = dict(zip(indices['IdIndice'], indices['NomeIndice']))
     benchmark_names = list(values_index.columns)
     benchmark_names = [dict_map.get(item, item) for item in benchmark_names]
     values_index.columns = benchmark_names
