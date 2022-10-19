@@ -236,6 +236,13 @@ portfolio_acc = pd.concat([portfolio_acc, benchmark_Returns[benchmark]], axis=1)
 for i in range(portfolio_acc.shape[0]-1):
     portfolio_acc.iloc[i+1,:] = (1 + portfolio_acc.iloc[i+1,:]) * (1+ portfolio_acc.iloc[i,:]) - 1 # Accumulated returns
 
+if benchmark == 'CDI': 
+    retorno_cdi_acc = portfolio_acc.loc[:,benchmark]
+else:
+    retorno_cdi_acc = benchmark_Returns["CDI"]
+    for i in range(len(retorno_cdi_acc)-1):
+        retorno_cdi_acc.iloc[i+1,:] = (1 + retorno_cdi_acc.iloc[i+1,:]) * (1 + retorno_cdi_acc.iloc[i,:]) - 1 # Accumulated returns
+    
 # ASSET STRATEGIES
 strategy_returns = pd.DataFrame(index = benchmark_Returns.index , columns = list(portfolio['Estratégia'].unique()))
 for i in strategy_returns.columns:
@@ -245,10 +252,29 @@ for i in strategy_returns.columns:
             asset_group = asset_group + [j]        
     strategy_returns[i] = assets_returns_W[asset_group].sum(axis=1)  # Daily returns
     
-strategy_acc = strategy_returns .copy()   
+  
+strategy_weights = pd.Series(data = list(portfolio['Estratégia'].unique()), index = list(portfolio['Estratégia'].unique()))
+strategy_weights = strategy_weights.apply(lambda x: portfolio[(portfolio['Estratégia'] == x)]['% do PL'].sum()).astype(float)
+strategy_acc = strategy_returns.copy()
+strategy_acc = strategy_acc.mul(strategy_weights**(-1)) 
 for i in range(strategy_acc.shape[0]-1):
-    strategy_acc.iloc[i+1,:] = (1 + strategy_acc.iloc[i+1,:]) * (1 + strategy_acc.iloc[i,:]) - 1 # Accumulated returns
+    strategy_acc.iloc[i+1,:] = (1 + strategy_acc.iloc[i+1,:]) * (1 + strategy_acc.iloc[i,:]) - 1 # Accumulated returns (normalized for each strategy)
 
+
+
+strategy_acc_W = strategy_returns.copy()   
+for i in range(strategy_acc_W.shape[0]-1):
+    strategy_acc_W.iloc[i+1,:] = (1 + strategy_acc_W.iloc[i+1,:]) * (1 + strategy_acc_W.iloc[i,:]) - 1 # Accumulated returns
+
+strategy_columns = [sub.replace('Pós-fixado', 'RF Pós').replace('Pré-fixado', 'RF Pré').replace('Inflação', 'RF Inlação')
+                            .replace('Macro', 'MM Macro').replace('Descorrelacionados', 'MM Descorr.').replace('Brasil', 'RV BR')
+                            .replace('Internacional', 'RV Int.') for sub in list(strategy_acc.columns)]
+
+strategy_acc.columns = strategy_columns
+strategy_acc_W.columns = strategy_columns
+strategy_weights.index = [sub.replace('RV Int.', 'RV Internacional').replace('MM Descorr.', 'MM Descorrelacionados')
+                          .replace('RV BR', 'RV Brasil')for sub in strategy_columns]
+strategy_acc['CDI'] = retorno_cdi_acc
     
 # ASSET CLASSES
 class_returns = pd.DataFrame(index = benchmark_Returns.index , columns = list(portfolio['Classe'].unique()))        
@@ -259,18 +285,40 @@ for i in class_returns.columns:
             asset_group = asset_group + [j]
     class_returns[i] = assets_returns_W[asset_group].sum(axis=1)    # Daily returns
     
-class_acc = class_returns.copy()    
+    
+class_weights = pd.Series(data = list(portfolio['Classe'].unique()), index = list(portfolio['Classe'].unique()))
+class_weights = class_weights.apply(lambda x: portfolio[(portfolio['Classe'] == x)]['% do PL'].sum()).astype(float)
+class_acc = class_returns.copy()
+class_acc = class_returns.mul(class_weights**(-1)) 
 for i in range(class_acc.shape[0]-1):
-    class_acc.iloc[i+1,:] = (1 + class_acc.iloc[i+1,:]) * (1 + class_acc.iloc[i,:]) - 1 # Accumulated returns
+    class_acc.iloc[i+1,:] = (1 + class_acc.iloc[i+1,:]) * (1 + class_acc.iloc[i,:]) - 1 # Accumulated returns (normalized for each class)   
+    
+class_acc_W = class_returns.copy()    
+for i in range(class_acc_W.shape[0]-1):
+    class_acc_W.iloc[i+1,:] = (1 + class_acc_W.iloc[i+1,:]) * (1 + class_acc_W.iloc[i,:]) - 1 # Accumulated returns
+    
+class_columns = [sub.replace('Renda Fixa', 'Renda Fixa (RF)').replace('Multimercado', 'Multimercado (MM)')
+                 .replace('Renda Variável', 'Renda Variável (RV)') for sub in list(class_acc.columns)]
+
+class_acc.columns = class_columns
+class_acc_W.columns = class_columns
+class_weights.index = class_columns
+class_acc['CDI'] = retorno_cdi_acc
     
 ''' 7) CALCULATE PERFORMANCE METRICS --------------------------------------------------------------------------------------------------------------------------------'''
 print("Calculating performance metrics...")
 
 # Performance attribution
-class_perf_attr = class_acc.iloc[-1,:]
+class_perf_attr = class_acc_W.iloc[-1,:]
 class_perf_attr.name = 'Class Performance Attribution'
-strategy_perf_attr = strategy_acc.iloc[-1,:]
+class_perf_attr['Total'] = (1+class_perf_attr).to_numpy().prod() - 1
+strategy_perf_attr = strategy_acc_W.iloc[-1,:]
 strategy_perf_attr.name = 'Strategy Performance Attribution'
+strategy_perf_attr['Total'] = (1+strategy_perf_attr).to_numpy().prod() - 1
+#strategy_perf_attr.index = [sub.replace('Pos-fixado', 'RF Pós').replace('Pré-fixado', 'RF Pré').replace('Inflação', 'RF Inlação')
+#                            .replace('Macro', 'MM Macro').replace('Descorrelacionados', 'MM Descorr.').replace('Brasil', 'RV BR')
+#                            .replace('Internacional', 'RV Int.') for sub in list(strategy_perf_attr.index)]
+
 
 # Portfolio vs. Benchmark: Return, Vol, Sharpe
 if benchmark == "": benchmark = "CDI" 
@@ -326,9 +374,13 @@ for i in portf_vs_bench_3.index:
 
 portf_vs_bench_3['%'+benchmark] = portf_vs_bench_3["Portfólio Sugerido"] / portf_vs_bench_3[benchmark]
 
+portf_vs_bench_3.index =  [sub.replace('-01', 'Jan.').replace('-02', 'Fev.').replace('-03', 'Mar.').replace('-04', 'Abr.').replace('-05', 'Mai.')
+                            .replace('-06', 'Jun.').replace('-07', 'Jul.').replace('-08', 'Ago.').replace('-09', 'Set.').replace('-10', 'Out.')
+                           .replace('-11', 'Nov.').replace('-12', 'Dez.') for sub in list(portf_vs_bench_3.index)]
+
 
 # Portfolio vs. Benchmark: Statistics
-portf_vs_bench_4 = pd.DataFrame(columns = ["Meses Positivos", "Meses Negativos", "Maior Retorno", "Menor Retorno", "Acima do CDI (meses)", "Abaixo do CDI (meses)"],
+portf_vs_bench_4 = pd.DataFrame(columns = ["Meses\nPositivos", "Meses\nNegativos", "Maior Retorno\nMensal", "Menor Retorno\nMensal", "Acima do CDI\n(meses)", "Abaixo do CDI\n(meses)"],
                                   index = ["Portfólio Sugerido", benchmark])
 
 portf_vs_bench_4.iloc[0,0] = portf_vs_bench_3[(portf_vs_bench_3["Portfólio Sugerido"]>=0)]["Portfólio Sugerido"].count()
@@ -341,15 +393,19 @@ portf_vs_bench_4.iloc[0,3] = portf_vs_bench_3["Portfólio Sugerido"].min()
 portf_vs_bench_4.iloc[1,3] = portf_vs_bench_3[benchmark].min()
 
 if benchmark == "CDI":
-    portf_vs_bench_4.iloc[0,4] = portf_vs_bench_3[(portf_vs_bench_3["Portfólio Sugerido"]>=portf_vs_bench_3["CDI"])]["Portfólio Sugerido"].count()
-    portf_vs_bench_4.iloc[0,5] = portf_vs_bench_3[(portf_vs_bench_3["Portfólio Sugerido"]<portf_vs_bench_3["CDI"])]["Portfólio Sugerido"].count()
+    portf_vs_bench_4.iloc[0,4] = portf_vs_bench_3[(portf_vs_bench_3["Portfólio Sugerido"]>=portf_vs_bench_3[benchmark])]["Portfólio Sugerido"].count()
+    portf_vs_bench_4.iloc[0,5] = portf_vs_bench_3[(portf_vs_bench_3["Portfólio Sugerido"]<portf_vs_bench_3[benchmark])]["Portfólio Sugerido"].count()
     portf_vs_bench_4.iloc[1,4] = 0
     portf_vs_bench_4.iloc[1,5] = 0
 else:
-    retorno_CDI_M = benchmark_Returns["CDI"]
-    retorno_CDI_M.name = "retorno_CDI_M"
-    retorno_CDI_M.index = retorno_CDI_M.index.strftime("%Y-%m")
-    retorno_CDI_M = retorno_CDI_M.groupby(level=0,axis=0).sum()
+    retorno_CDI_M_aux = benchmark_Returns["CDI"]
+    retorno_CDI_M_aux.name = "retorno_CDI_M"
+    retorno_CDI_M_aux.index = retorno_CDI_M_aux.index.strftime("%Y-%m")
+    retorno_CDI_M = retorno_CDI_M_aux.groupby(level=0,axis=0).sum()
+    retorno_CDI_M = pd.Series(index = np.unique(list(retorno_CDI_M_aux.index)))
+    for i in retorno_CDI_M.index:
+        retorno_CDI_M[i] = (1 + retorno_CDI_M_aux[(retorno_CDI_M_aux.index == i)]).to_numpy().prod() - 1
+    
     portf_vs_bench_4.iloc[0,4] = portf_vs_bench_3[(portf_vs_bench_3["Portfólio Sugerido"]>=retorno_CDI_M)]["Portfólio Sugerido"].count()
     portf_vs_bench_4.iloc[0,5] = portf_vs_bench_3[(portf_vs_bench_3["Portfólio Sugerido"]<retorno_CDI_M)]["Portfólio Sugerido"].count()
     portf_vs_bench_4.iloc[1,4] = portf_vs_bench_3[(portf_vs_bench_3[benchmark]>=retorno_CDI_M)][benchmark].count()
@@ -458,13 +514,27 @@ else:
 assets_returns = pd.concat([assets_returns, benchmark_Returns[benchmark]], axis=1)
 first_column = assets_returns.pop(benchmark)
 assets_returns.insert(0,benchmark, first_column)
-
+ 
+assets_returns_columns = [sub.replace(' FIC', '').replace(' de ', ' ').replace(' LP', '').replace(' MM', '').replace(' Access', '')
+                          .replace(' Feeder', '').replace(' FIA', '').replace(' FIM', '').replace(' FIM', '').replace(' RF', '')
+                          .replace(' FIRF', '').replace(' CP', '').replace(' IE', '').replace(' Long And Short', ' LS')
+                          .replace(' Renda Fixa', ' RF').replace('Ibovespa', 'IBOV')
+                          .replace(' Debêntures Incentivadas', ' Deb. Inc.') for sub in list(assets_returns.columns)]
+assets_returns.columns = assets_returns_columns
 correlation = assets_returns.loc[:,((np.std(assets_returns)*np.sqrt(252)>0.005) | (assets_returns.columns == benchmark))].corr()
-  
 
+for i in range(correlation.shape[0]):
+    for j in range(correlation.shape[1]):
+        if i<j: correlation.iloc[i,j] = "-"
+        
+rows_correl = list(correlation.index)
+alphabet = list(map(chr, range(65, 90)))[0:len(rows_correl)]
+columns_correl = list('('+ a + ") " for a in alphabet)
+rows_correl =  [ x + y for x, y in zip(columns_correl, rows_correl)]
+correlation.columns = columns_correl
+correlation.index = rows_correl
+        
 ''' 8) PRINT TO EXCEL --------------------------------------------------------------------------------------------------------------------------------'''
-
-print("Writing on Excel...")
 
 # Create workbook object (try to opeen an existing one, if it doesn`t exist, create one)
 try:
@@ -482,25 +552,51 @@ if not output_sheet in sNamList:
     sheet = wb.sheets.add(output_sheet)
 else: sheet = wb.sheets[output_sheet]
 
+print("Writing on Excel...(1/14)")
 sheet.range('4:6').clear_contents() # Delete old data
 sheet.range((4, 2)).value = portf_vs_bench_1
+
+print("Writing on Excel...(2/14)")
 sheet.range('11:13').clear_contents()
 sheet.range((11, 2)).value = portf_vs_bench_2
+
+print("Writing on Excel...(3/14)")
 sheet.range('18:21').clear_contents() 
 sheet.range((18, 2)).value = portf_vs_bench_3.T
+
+print("Writing on Excel...(4/14)")
 sheet.range('26:28').clear_contents() 
 sheet.range((26, 2)).value = portf_vs_bench_4
+
+print("Writing on Excel...(5/14)")
 sheet.range('33:35').clear_contents() 
 sheet.range((33, 2)).value = portf_vs_bench_5
+
+print("Writing on Excel...(6/14)")
 sheet.range('40:43').clear_contents()
 sheet.range((40, 2)).value = portf_vs_bench_6
-sheet.range('47:50').clear_contents()
+
+print("Writing on Excel...(7/14)")
+sheet.range('47:52').clear_contents()
 sheet.range((47, 2)).value = class_perf_attr
-sheet.range('55:70').clear_contents() 
-sheet.range((55, 2)).value = strategy_perf_attr
+
+print("Writing on Excel...(8/14)")
+sheet.range('56:70').clear_contents() 
+sheet.range((56, 2)).value = strategy_perf_attr
 
 
+print("Writing on Excel...(9/14)")
+# Write Portfolio and Benchmark Accumulated Returns:
+output_sheet = 'Alocation'        
+if not output_sheet in sNamList:
+    sheet = wb.sheets.add(output_sheet)
+else: sheet = wb.sheets[output_sheet]
 
+sheet.range('5:18').clear_contents() # Delete old data
+sheet.range((5, 2)).value = class_weights
+sheet.range((5, 5)).value = strategy_weights
+
+print("Writing on Excel...(10/14)")
 # Write Portfolio and Benchmark Accumulated Returns:
 output_sheet = 'AccReturns'        
 data = portfolio_acc
@@ -512,7 +608,7 @@ else: sheet = wb.sheets[output_sheet]
 sheet.clear_contents() # Delete old data
 sheet.range((2, 2)).value = data
 
-
+print("Writing on Excel...(11/14)")
 # Write Volatility Moving Windows:
 output_sheet = 'MovingVol'        
 data = volatility
@@ -524,7 +620,7 @@ else: sheet = wb.sheets[output_sheet]
 sheet.clear_contents() # Delete old data
 sheet.range((2, 2)).value = data
 
-
+print("Writing on Excel...(12/14)")
 # Write Correlation Matrix:
 output_sheet = 'Correl'        
 data = correlation
@@ -533,10 +629,10 @@ if not output_sheet in sNamList:
     sheet = wb.sheets.add(output_sheet)
 else: sheet = wb.sheets[output_sheet]
 
-sheet.clear_contents() # Delete old data
-sheet.range((2, 2)).value = data
+sheet.range('4:40').clear_contents() 
+sheet.range((4, 2)).value = data
 
-
+print("Writing on Excel...(13/14)")
 # Write Drawdown:
 output_sheet = 'Drawdown'        
 data = drawdown
@@ -548,19 +644,7 @@ else: sheet = wb.sheets[output_sheet]
 sheet.clear_contents() # Delete old data
 sheet.range((2, 2)).value = data
 
-
-# Write Monthly Returns:
-output_sheet = 'Monthly Returns'        
-data = portf_vs_bench_3
-
-if not output_sheet in sNamList:
-    sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 2)).value = data
-
-
+print("Writing on Excel...(14/14)")
 # Write Strategy Acc Returns:
 output_sheet = 'Strategy AccReturns'        
 data = strategy_acc
@@ -666,7 +750,7 @@ sheet.range((2, 1)).value = data
 
 # Print Strategy Acc Returns:
 output_sheet = 'Strategy AccReturns'        
-data = strategy_acc
+data = strategy_acc_W
 
 if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
 else: sheet = wb.sheets[output_sheet]
@@ -688,7 +772,7 @@ sheet.range((2, 1)).value = data
 
 # Print Class Acc Returns:
 output_sheet = 'Class AccReturns'        
-data = class_acc
+data = class_acc_W
 
 if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
 else: sheet = wb.sheets[output_sheet]
