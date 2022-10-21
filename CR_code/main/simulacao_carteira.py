@@ -49,6 +49,7 @@ date_first = worksheet['AB2'].value
 date_last = worksheet['AB3'].value
 benchmark = worksheet['AB4'].value
 amount = worksheet['M3'].value
+taxa_gestao = worksheet['J3'].value
 
 
 portfolio = pd.read_excel(excel_path, sheet_name = sheet_portfolio, header=1).iloc[4:,2:].dropna(how='all',axis=0).dropna(how='all',axis=1) 
@@ -226,16 +227,26 @@ for i in assets_returns.columns:
 assets_returns_W = assets_returns.copy()
 for i in assets_returns_W.index:
     assets_returns_W.loc[i,:] = assets_returns_W.loc[i,:].mul(portfolio['% do PL']) # performance attribution per product
+
             
 # PORTFOLIO
 portfolio_return = assets_returns_W.sum(axis=1) # Daily returns
+portfolio_return = portfolio_return + ((1-taxa_gestao)**(1/252)-1) # Subtract management fee
 
 portfolio_acc = portfolio_return.copy()
 portfolio_acc.name = 'Portfólio Sugerido'
 portfolio_acc = pd.concat([portfolio_acc, benchmark_Returns[benchmark]], axis=1)
 for i in range(portfolio_acc.shape[0]-1):
-    portfolio_acc.iloc[i+1,:] = (1 + portfolio_acc.iloc[i+1,:]) * (1+ portfolio_acc.iloc[i,:]) - 1 # Accumulated returns
+    portfolio_acc.iloc[i+1,:] = (1 + portfolio_acc.iloc[i+1,:]) * (1+ portfolio_acc.iloc[i,:])  - 1 # Accumulated returns
 
+'''
+assets_returns_acc = assets_returns.copy()
+for i in range(assets_returns.shape[0]-1):
+    assets_returns.iloc[i+1,:] = (1 + assets_returns.iloc[i+1,:]) * (1+ assets_returns.iloc[i,:]) - 1 # Accumulated returns
+for i in assets_returns_W.index:
+    x = assets_returns_acc.loc[i,:].mul(portfolio['% do PL'])
+x = x.sum(axis=1)[-1]
+'''
 if benchmark == 'CDI': 
     retorno_cdi_acc = portfolio_acc.loc[:,benchmark]
 else:
@@ -545,6 +556,7 @@ except:
     wb = xw.Book(excel_path)
 
 sNamList = [sh.name for sh in wb.sheets]
+wb.app.calculation = 'manual'
 
 # Write Portfolio vs. Benchmark comparisons:
 output_sheet = 'Performance Measurement'        
@@ -622,7 +634,7 @@ sheet.range((2, 2)).value = data
 
 print("Writing on Excel...(12/14)")
 # Write Correlation Matrix:
-output_sheet = 'Correl'        
+output_sheet = 'Sim_3'        
 data = correlation
 
 if not output_sheet in sNamList:
@@ -630,7 +642,7 @@ if not output_sheet in sNamList:
 else: sheet = wb.sheets[output_sheet]
 
 sheet.range('4:40').clear_contents() 
-sheet.range((4, 2)).value = data
+sheet.range((6, 2)).value = data
 
 print("Writing on Excel...(13/14)")
 # Write Drawdown:
@@ -655,6 +667,29 @@ else: sheet = wb.sheets[output_sheet]
 sheet.clear_contents() # Delete old data
 sheet.range((2, 1)).value = data
 
+
+# Print Assets Returns:
+output_sheet = 'Assets Returns'        
+data = assets_returns
+
+if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
+else: sheet = wb.sheets[output_sheet]
+
+sheet.clear_contents() # Delete old data
+sheet.range((2, 1)).value = data
+
+
+# Print Assets Returns:
+output_sheet = 'Strategy Returns'        
+data = strategy_returns
+
+if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
+else: sheet = wb.sheets[output_sheet]
+
+sheet.clear_contents() # Delete old data
+sheet.range((2, 1)).value = data
+
+wb.app.calculation = 'automatic'
 
 print("Completed.")
 
