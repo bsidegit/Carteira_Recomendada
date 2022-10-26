@@ -9,16 +9,13 @@ Created on Mon Sep 12 15:07:00 2022
 import pandas as pd
 import numpy as np
 import xlwings as xw
-#import win32com.client
+import win32com.client
 import openpyxl
 #from openpyxl.utils.dataframe import dataframe_to_rows
-#import matplotlib.pyplot as plt
 
 import datetime as dt
 from dateutil.relativedelta import relativedelta
 
-#import matplotlib.pyplot as plt
-#import seaborn as sns
 
 import warnings 
 warnings.filterwarnings('ignore')
@@ -42,7 +39,7 @@ from  benchmark_prices_database import benchmark_prices_database
 sheet_portfolio = "Criação de Portfólio"
 
 print("Getting portfolio from Excel...")    
-excel_path = parent_path + '/Carteira Recomendada.xlsm'
+excel_path = parent_path + '/Carteira Recomendada - MFO.xlsm'
 wb = openpyxl.load_workbook(excel_path, data_only=True)
 worksheet = wb[sheet_portfolio]
 date_first = worksheet['AB2'].value
@@ -239,14 +236,6 @@ portfolio_acc = pd.concat([portfolio_acc, benchmark_Returns[benchmark]], axis=1)
 for i in range(portfolio_acc.shape[0]-1):
     portfolio_acc.iloc[i+1,:] = (1 + portfolio_acc.iloc[i+1,:]) * (1+ portfolio_acc.iloc[i,:])  - 1 # Accumulated returns
 
-'''
-assets_returns_acc = assets_returns.copy()
-for i in range(assets_returns.shape[0]-1):
-    assets_returns.iloc[i+1,:] = (1 + assets_returns.iloc[i+1,:]) * (1+ assets_returns.iloc[i,:]) - 1 # Accumulated returns
-for i in assets_returns_W.index:
-    x = assets_returns_acc.loc[i,:].mul(portfolio['% do PL'])
-x = x.sum(axis=1)[-1]
-'''
 if benchmark == 'CDI': 
     retorno_cdi_acc = portfolio_acc.loc[:,benchmark]
 else:
@@ -255,7 +244,8 @@ else:
         retorno_cdi_acc.iloc[i+1,:] = (1 + retorno_cdi_acc.iloc[i+1,:]) * (1 + retorno_cdi_acc.iloc[i,:]) - 1 # Accumulated returns
     
 # ASSET STRATEGIES
-strategy_returns = pd.DataFrame(index = benchmark_Returns.index , columns = list(portfolio['Estratégia'].unique()))
+
+strategy_returns =  pd.DataFrame(index = benchmark_Returns.index , columns = list(portfolio['Estratégia'].unique())) # Daily returns:   
 for i in strategy_returns.columns:
     asset_group = []
     for j in assets_returns_W.columns:
@@ -266,29 +256,28 @@ for i in strategy_returns.columns:
   
 strategy_weights = pd.Series(data = list(portfolio['Estratégia'].unique()), index = list(portfolio['Estratégia'].unique()))
 strategy_weights = strategy_weights.apply(lambda x: portfolio[(portfolio['Estratégia'] == x)]['% do PL'].sum()).astype(float)
-strategy_acc = strategy_returns.copy()
+
+strategy_attr = strategy_returns.copy() # Attribution:
+    
+strategy_acc = strategy_returns.copy() # Accumulated returns (normalized, standalone):
 strategy_acc = strategy_acc.mul(strategy_weights**(-1)) 
 for i in range(strategy_acc.shape[0]-1):
     strategy_acc.iloc[i+1,:] = (1 + strategy_acc.iloc[i+1,:]) * (1 + strategy_acc.iloc[i,:]) - 1 # Accumulated returns (normalized for each strategy)
+    strategy_attr.iloc[i+1,:] =  strategy_returns.iloc[i+1,:] * (1 + portfolio_acc.iloc[i,0])
 
-
-
-strategy_acc_W = strategy_returns.copy()   
-for i in range(strategy_acc_W.shape[0]-1):
-    strategy_acc_W.iloc[i+1,:] = (1 + strategy_acc_W.iloc[i+1,:]) * (1 + strategy_acc_W.iloc[i,:]) - 1 # Accumulated returns
 
 strategy_columns = [sub.replace('Pós-fixado', 'RF Pós').replace('Pré-fixado', 'RF Pré').replace('Inflação', 'RF Inlação')
                             .replace('Macro', 'MM Macro').replace('Descorrelacionados', 'MM Descorr.').replace('Brasil', 'RV BR')
                             .replace('Internacional', 'RV Int.') for sub in list(strategy_acc.columns)]
 
 strategy_acc.columns = strategy_columns
-strategy_acc_W.columns = strategy_columns
+strategy_attr.columns = strategy_columns
 strategy_weights.index = [sub.replace('RV Int.', 'RV Internacional').replace('MM Descorr.', 'MM Descorrelacionados')
                           .replace('RV BR', 'RV Brasil')for sub in strategy_columns]
 strategy_acc['CDI'] = retorno_cdi_acc
     
 # ASSET CLASSES
-class_returns = pd.DataFrame(index = benchmark_Returns.index , columns = list(portfolio['Classe'].unique()))        
+class_returns = pd.DataFrame(index = benchmark_Returns.index , columns = list(portfolio['Classe'].unique()))  # Daily returns:         
 for i in class_returns.columns:
     asset_group = []
     for j in assets_returns_W.columns:
@@ -296,23 +285,24 @@ for i in class_returns.columns:
             asset_group = asset_group + [j]
     class_returns[i] = assets_returns_W[asset_group].sum(axis=1)    # Daily returns
     
-    
+  
 class_weights = pd.Series(data = list(portfolio['Classe'].unique()), index = list(portfolio['Classe'].unique()))
 class_weights = class_weights.apply(lambda x: portfolio[(portfolio['Classe'] == x)]['% do PL'].sum()).astype(float)
-class_acc = class_returns.copy()
-class_acc = class_returns.mul(class_weights**(-1)) 
+
+class_attr = class_returns.copy() # Attribution:
+    
+class_acc = class_returns.copy() # Accumulated returns (normalized, standalone):
+class_acc = class_acc.mul(class_weights**(-1)) 
 for i in range(class_acc.shape[0]-1):
-    class_acc.iloc[i+1,:] = (1 + class_acc.iloc[i+1,:]) * (1 + class_acc.iloc[i,:]) - 1 # Accumulated returns (normalized for each class)   
-    
-class_acc_W = class_returns.copy()    
-for i in range(class_acc_W.shape[0]-1):
-    class_acc_W.iloc[i+1,:] = (1 + class_acc_W.iloc[i+1,:]) * (1 + class_acc_W.iloc[i,:]) - 1 # Accumulated returns
-    
+    class_acc.iloc[i+1,:] = (1 + class_acc.iloc[i+1,:]) * (1 + class_acc.iloc[i,:]) - 1 # Accumulated returns (normalized for each strategy)
+    class_attr.iloc[i+1,:] =  class_returns.iloc[i+1,:] * (1 + portfolio_acc.iloc[i,0])
+
+
 class_columns = [sub.replace('Renda Fixa', 'Renda Fixa (RF)').replace('Multimercado', 'Multimercado (MM)')
                  .replace('Renda Variável', 'Renda Variável (RV)') for sub in list(class_acc.columns)]
 
 class_acc.columns = class_columns
-class_acc_W.columns = class_columns
+class_attr.columns = class_columns
 class_weights.index = class_columns
 class_acc['CDI'] = retorno_cdi_acc
     
@@ -320,15 +310,15 @@ class_acc['CDI'] = retorno_cdi_acc
 print("Calculating performance metrics...")
 
 # Performance attribution
-class_perf_attr = class_acc_W.iloc[-1,:]
-class_perf_attr.name = 'Class Performance Attribution'
-class_perf_attr['Total'] = (1+class_perf_attr).to_numpy().prod() - 1
-strategy_perf_attr = strategy_acc_W.iloc[-1,:]
-strategy_perf_attr.name = 'Strategy Performance Attribution'
-strategy_perf_attr['Total'] = (1+strategy_perf_attr).to_numpy().prod() - 1
-#strategy_perf_attr.index = [sub.replace('Pos-fixado', 'RF Pós').replace('Pré-fixado', 'RF Pré').replace('Inflação', 'RF Inlação')
-#                            .replace('Macro', 'MM Macro').replace('Descorrelacionados', 'MM Descorr.').replace('Brasil', 'RV BR')
-#                            .replace('Internacional', 'RV Int.') for sub in list(strategy_perf_attr.index)]
+class_perf_attr = class_attr.sum(axis=0)
+strategy_perf_attr = strategy_attr.sum(axis=0)
+if taxa_gestao != 0:
+    class_perf_attr['Taxa de Gestão'] = (1-taxa_gestao)**(class_attr.shape[0]/252)-1
+    strategy_perf_attr['Taxa de Gestão'] = (1-taxa_gestao)**(strategy_attr.shape[0]/252)-1
+
+class_perf_attr['Total'] = class_perf_attr.sum()
+
+strategy_perf_attr['Total'] = strategy_perf_attr.sum()
 
 
 # Portfolio vs. Benchmark: Return, Vol, Sharpe
@@ -589,12 +579,12 @@ sheet.range('40:43').clear_contents()
 sheet.range((40, 2)).value = portf_vs_bench_6
 
 print("Writing on Excel...(7/14)")
-sheet.range('47:52').clear_contents()
-sheet.range((47, 2)).value = class_perf_attr
+sheet.range('48:54').clear_contents()
+sheet.range((48, 2)).value = class_perf_attr
 
 print("Writing on Excel...(8/14)")
-sheet.range('56:70').clear_contents() 
-sheet.range((56, 2)).value = strategy_perf_attr
+sheet.range('58:70').clear_contents() 
+sheet.range((58, 2)).value = strategy_perf_attr
 
 
 print("Writing on Excel...(9/14)")
@@ -657,17 +647,6 @@ sheet.clear_contents() # Delete old data
 sheet.range((2, 2)).value = data
 
 print("Writing on Excel...(14/14)")
-# Write Strategy Acc Returns:
-output_sheet = 'Strategy AccReturns'        
-data = strategy_acc
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
 # Print Assets Returns:
 output_sheet = 'Assets Returns'        
 data = assets_returns
@@ -678,6 +657,16 @@ else: sheet = wb.sheets[output_sheet]
 sheet.clear_contents() # Delete old data
 sheet.range((2, 1)).value = data
 
+'''
+# Write Strategy Acc Returns:
+output_sheet = 'Strategy AccReturns'        
+data = strategy_acc
+
+if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
+else: sheet = wb.sheets[output_sheet]
+
+sheet.clear_contents() # Delete old data
+sheet.range((2, 1)).value = data
 
 # Print Assets Returns:
 output_sheet = 'Strategy Returns'        
@@ -688,6 +677,7 @@ else: sheet = wb.sheets[output_sheet]
 
 sheet.clear_contents() # Delete old data
 sheet.range((2, 1)).value = data
+'''
 
 wb.app.calculation = 'automatic'
 
