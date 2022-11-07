@@ -11,10 +11,11 @@ Created on Mon Sep 12 15:07:00 2022
 # 1. Delete older files from local paste
 # 2. Copy new "CR_code"  paste on local folder
 # 3. Add "." before "from formulas..." as from .formulas..." below in the "comps.py" file copy in the local folder
-# 4. Change excel file_name
-# 5. Go to Anaconda Prompt (using the chosen environment >>"conda activate bside_clean") up to the local folder (>>cd [local address])
-# 6. Paste and run the Compiler PyInstaller code line above
-# 7. Copy and paste the new generated "dist" folder into the original intranet folder (I:\GESTAO\3) Carteira Recomendada\Carteira Recomendada)
+# 4. Comment main_code() line in the end of file to avoid double execution
+# 5. Change excel file_name
+# 6. Go to Anaconda Prompt (using the chosen environment >>"conda activate bside_clean") up to the local folder (>>cd [local address])
+# 7. Paste and run the Compiler PyInstaller code line above
+# 8. Copy and paste the new generated "dist" folder into the original intranet folder (I:\GESTAO\3) Carteira Recomendada\Carteira Recomendada)
 
 # Files needed to run the file standalone: "dist" folder, run_CR, "RUN_Excel" (Windows Batch File)
 
@@ -42,6 +43,7 @@ sys.path.append(parent_path+'/CR_code/formulas')
 
 from  formulas.fund_prices_database import fund_prices_database
 from  formulas.benchmark_prices_database import benchmark_prices_database
+from  formulas.stock_prices_database import stock_prices_database
 
 def main_code():
     
@@ -49,7 +51,7 @@ def main_code():
     print("Initiating simulation...") 
     print("Getting portfolio from Excel...")     
     
-    file_name = 'Carteira Recomendada - MFO 4.xlsm'
+    file_name = 'Carteira Recomendada - AAI.xlsm'
     
     #Using win32com.client:
     sheet_name = "Criação de Portfólio"
@@ -62,6 +64,7 @@ def main_code():
     benchmark = ws.Range('AB4').Value
     amount = ws.Range('M3').Value
     taxa_gestao = ws.Range('J3').Value
+    if taxa_gestao == None: taxa_gestao = 0
     
     date_first = pd.Timestamp(date_first.timestamp(), unit = 's')
     date_last = pd.Timestamp(date_last.timestamp(), unit = 's')
@@ -115,7 +118,7 @@ def main_code():
             portfolio._set_value(i,'Estratégia', estrategia)
     
     portfolio = portfolio[(portfolio['column_0'] != "x") & (portfolio['column_1'] != "x") & (portfolio['column_1'] != "y")]    
-    
+               
     portfolio = portfolio[['Ativo','CNPJ', 'R$', '% do PL', 'Benchmark', '% Benchmark', 'Benchmark +', 'Liquidez (D+)', 'Classe', 'Estratégia']]
     
     portfolio_ativos = [sub.replace(' FIC', '').replace(' de ', ' ').replace(' LP', '').replace(' MM', '').replace(' Access', '')
@@ -126,8 +129,9 @@ def main_code():
     portfolio['Ativo'] = portfolio_ativos
     
     dict_CNPJ = dict(zip(portfolio['CNPJ'], portfolio['Ativo']))
-    benchmark_list = ['CDI','SELIC', 'Ibovespa','IHFA','IPCA','IMA-B','IMA-B 5', 'PTAX', 'SP500', 'Prévia IPCA']
     cnpj_list = list(portfolio[(portfolio['CNPJ']!="-")]['CNPJ'].to_numpy().flatten().astype(float))
+    benchmark_list = ['CDI','SELIC', 'Ibovespa','IHFA','IPCA','IMA-B','IMA-B 5', 'PTAX', 'SP500', 'Prévia IPCA']
+    stocks_list = list(portfolio[((portfolio['CNPJ']=="-") & (portfolio['Ativo'].str.len()<=6))]['Ativo'].to_numpy().flatten())
     print("Done.")
     
     ''' 3) IMPORT FUND PRICES --------------------------------------------------------------------------------------'''
@@ -135,10 +139,16 @@ def main_code():
     print("Getting fund prices...")
     fund_prices = fund_prices_database(cnpj_list, date_first - dt.timedelta(days=62), date_last) # -62 to be able to get IPCA values 
     fund_prices.rename(columns=dict_CNPJ, inplace=True)
+    new_columns = list(portfolio[((portfolio['CNPJ'] != "-") & (~portfolio['Ativo'].isin(list(fund_prices.columns))))]['Ativo'])
+    fund_prices[[new_columns]] = np.nan
     print("Done.")
+    
+    print("Getting benchmark prices...")
+    stock_prices = stock_prices_database(stocks_list, date_first - dt.timedelta(days=62), date_last) 
+    print("Done.")
+    
     print("Getting benchmark prices...")
     benchmark_prices = benchmark_prices_database(benchmark_list, date_first - dt.timedelta(days=62), date_last) 
-    
     print("Done.")
     
     ''' 4) MANIPULATE PORTFOLIO CATHEGORICAL COLUMNS ----------------------------------------------------------------------------------------------------------'''
@@ -174,6 +184,15 @@ def main_code():
     fund_Returns = fund_Returns.iloc[1:,:]
     fund_Returns = fund_Returns[((fund_Returns.index>=date_first) & (fund_Returns.index<=date_last))]
     print("Done.")
+    
+    print("Calculating stock returns...")
+    # Stock daily returns:
+    stock_prices.fillna(method='ffill', inplace=True)
+    stock_Returns = stock_prices.astype('float') / stock_prices.astype('float').shift(1) - 1
+    stock_Returns = stock_Returns.iloc[1:,:]
+    stock_Returns = stock_Returns[((stock_Returns.index>=date_first) & (stock_Returns.index<=date_last))]
+    print("Done.")
+    
     print("Calculating benchmark returns...")
     # Delete weekends and Brazilian holidays
     benchmark_prices.loc[:,'IPCA'].fillna(method='ffill', inplace=True)
@@ -253,10 +272,15 @@ def main_code():
             elif portfolio.loc[i,'Benchmark +'] != 0:
                 if portfolio.loc[i,'Benchmark'] != "-": # Fund with Benchmark+ proxy
                     assets_returns.loc[assets_returns[i].isna(), i] = (1+benchmark_Returns.loc[assets_returns[i].isna(), portfolio.loc[i,'Benchmark']]) * ((1+portfolio.loc[i,'Benchmark +'])**(1/252)) - 1
-                
                 else: # Fund with prefixed proxy
                     assets_returns.loc[assets_returns[i].isna(), i] = (1+portfolio.loc[i,'Benchmark +'])**(1/252) - 1
-                    
+            
+            elif portfolio.loc[i,'Benchmark'] != "-": # 100% Benchmark returns
+                assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
+            
+        elif portfolio.loc[i, 'CNPJ']=="-" and portfolio.loc[i, 'CNPJ']=="-" and len(i)<=6: # Stock/listed funds prices
+            assets_returns[i] = stock_Returns.loc[assets_returns.index, i]
+            
         elif portfolio.loc[i,'% Benchmark'] != 0: # Fixed income % Benchmark returns
             assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']] * portfolio.loc[i,'% Benchmark']
         
@@ -266,6 +290,10 @@ def main_code():
             
             else: # Fixed income prefixed returns
                 assets_returns[i] = (1+portfolio.loc[i,'Benchmark +'])**(1/252) - 1
+        
+        elif portfolio.loc[i,'Benchmark'] != "-": # 100% Benchmark returns
+            assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]      
+        
     
     # Get weighted performance for each asset
     assets_returns_W = assets_returns.copy()
@@ -562,7 +590,7 @@ def main_code():
     # Correlation Matrix
     asset_group = [benchmark]
     for j in assets_returns.columns:
-        if portfolio.loc[j,'CNPJ']!="-":
+        if portfolio.loc[j,'CNPJ']!="-" or np.std(assets_returns[j])*np.sqrt(252)>0.01:
             asset_group = asset_group + [j]
             
     assets_returns = pd.concat([assets_returns, benchmark_Returns[benchmark]], axis=1)
@@ -584,7 +612,7 @@ def main_code():
         alphabet2 = list(map(chr, range(65, 91)))[0:len(rows_correl)-26]
         alphabet2 = ["A" + letter for letter in alphabet2]
         alphabet = alphabet1 + alphabet2
-    columns_correl = list('('+ a + ")" for a in alphabet)
+    columns_correl = list('('+ a + ") " for a in alphabet)
     rows_correl =  [ x + y for x, y in zip(columns_correl, rows_correl)]
     correlation.columns = columns_correl
     correlation.index = rows_correl
@@ -609,40 +637,40 @@ def main_code():
         sheet = wb.sheets.add(output_sheet)
     else: sheet = wb.sheets[output_sheet]
     
-    print("Writing on Excel...(1/14)")
+    print("Writing on Excel...(1/15)")
     sheet.range('4:6').clear_contents() # Delete old data
     sheet.range((4, 2)).value = portf_vs_bench_1
     
-    print("Writing on Excel...(2/14)")
+    print("Writing on Excel...(2/15)")
     sheet.range('11:13').clear_contents()
     sheet.range((11, 2)).value = portf_vs_bench_2
     
-    print("Writing on Excel...(3/14)")
+    print("Writing on Excel...(3/15)")
     sheet.range('18:21').clear_contents() 
     sheet.range((18, 2)).value = portf_vs_bench_3.T
     
-    print("Writing on Excel...(4/14)")
+    print("Writing on Excel...(4/15)")
     sheet.range('26:28').clear_contents() 
     sheet.range((26, 2)).value = portf_vs_bench_4
     
-    print("Writing on Excel...(5/14)")
+    print("Writing on Excel...(5/15)")
     sheet.range('33:35').clear_contents() 
     sheet.range((33, 2)).value = portf_vs_bench_5
     
-    print("Writing on Excel...(6/14)")
+    print("Writing on Excel...(6/15)")
     sheet.range('40:43').clear_contents()
     sheet.range((40, 2)).value = portf_vs_bench_6
     
-    print("Writing on Excel...(7/14)")
+    print("Writing on Excel...(7/15)")
     sheet.range('48:54').clear_contents()
     sheet.range((48, 2)).value = class_perf_attr
     
-    print("Writing on Excel...(8/14)")
+    print("Writing on Excel...(8/15)")
     sheet.range('58:70').clear_contents() 
     sheet.range((58, 2)).value = strategy_perf_attr
     
     
-    print("Writing on Excel...(9/14)")
+    print("Writing on Excel...(9/15)")
     # Write Portfolio and Benchmark Accumulated Returns:
     output_sheet = 'Alocation'        
     if not output_sheet in sNamList:
@@ -653,7 +681,7 @@ def main_code():
     sheet.range((5, 2)).value = class_weights
     sheet.range((5, 5)).value = strategy_weights
     
-    print("Writing on Excel...(10/14)")
+    print("Writing on Excel...(10/15)")
     # Write Portfolio and Benchmark Accumulated Returns:
     output_sheet = 'AccReturns'        
     data = portfolio_acc
@@ -665,7 +693,7 @@ def main_code():
     sheet.clear_contents() # Delete old data
     sheet.range((2, 2)).value = data
     
-    print("Writing on Excel...(11/14)")
+    print("Writing on Excel...(11/15)")
     # Write Volatility Moving Windows:
     output_sheet = 'MovingVol'        
     data = volatility
@@ -677,7 +705,7 @@ def main_code():
     sheet.clear_contents() # Delete old data
     sheet.range((2, 2)).value = data
     
-    print("Writing on Excel...(12/14)")
+    print("Writing on Excel...(12/15)")
     # Write Correlation Matrix:
     output_sheet = 'Sim_3'        
     data = correlation
@@ -689,7 +717,7 @@ def main_code():
     sheet.range('4:40').clear_contents() 
     sheet.range((6, 2)).value = data
     
-    print("Writing on Excel...(13/14)")
+    print("Writing on Excel...(13/15)")
     # Write Drawdown:
     output_sheet = 'Drawdown'        
     data = drawdown
@@ -701,8 +729,8 @@ def main_code():
     sheet.clear_contents() # Delete old data
     sheet.range((2, 2)).value = data
     
-    print("Writing on Excel...(14/14)")
-    # Print Assets Returns:
+    print("Writing on Excel...(14/15)")
+    # Write Assets Returns:
     output_sheet = 'Assets Returns'        
     data = assets_returns
     
@@ -712,7 +740,7 @@ def main_code():
     sheet.clear_contents() # Delete old data
     sheet.range((2, 1)).value = data
     
-    '''
+    print("Writing on Excel...(15/15)")
     # Write Strategy Acc Returns:
     output_sheet = 'Strategy AccReturns'        
     data = strategy_acc
@@ -723,16 +751,6 @@ def main_code():
     sheet.clear_contents() # Delete old data
     sheet.range((2, 1)).value = data
     
-    # Print Assets Returns:
-    output_sheet = 'Strategy Returns'        
-    data = strategy_returns
-    
-    if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-    else: sheet = wb.sheets[output_sheet]
-    
-    sheet.clear_contents() # Delete old data
-    sheet.range((2, 1)).value = data
-    '''
     
     wb.app.calculation = 'automatic'
     
