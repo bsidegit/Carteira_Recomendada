@@ -12,9 +12,9 @@ def stock_prices_database(stocks_list, date_first, date_last):
 
     ''' 1) SET UP DATA BASE CONNECTOR ----------------------------------------------------------------------------'''
 
-    server = 'bswm-db.database.windows.net'
+    server = 'bside-srv.database.windows.net'
     database = 'bswm'
-    username = 'bswm-sa'
+    username = 'bside-sa'
     password = 'BatataPalha123!'   
     driver= '{ODBC Driver 18 for SQL Server}'
      

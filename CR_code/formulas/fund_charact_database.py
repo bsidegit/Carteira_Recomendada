@@ -6,19 +6,16 @@ Created on Mon Sep 12 18:46:34 2022
 """
 
 import pandas as pd
-import numpy as np
 import pyodbc
-from tqdm import tqdm # progress bar
-import datetime as dt
 
 
 def fund_charact_database(cnpj_list):
 
     ''' 1) SET UP DATA BASE CONNECTOR ----------------------------------------------------------------------------'''
 
-    server = 'bswm-db.database.windows.net'
+    server = 'bside-srv.database.windows.net'
     database = 'bswm'
-    username = 'bswm-sa'
+    username = 'bside-sa'
     password = 'BatataPalha123!'   
     driver= '{ODBC Driver 18 for SQL Server}'
     

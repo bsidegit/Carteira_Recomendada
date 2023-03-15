@@ -8,9 +8,9 @@ Created on Mon Sep 12 15:07:00 2022
 #Compiler PyInstaller (change the paths!!! Works for Eduardo): pyinstaller --onedir --add-binary "C:\\Users\eduardo.scheffer\\.conda\\envs\\bside_clean\\Lib\\site-packages\\pywin32_system32\\pythoncom39.dll;." --paths C:\Users\\eduardo.scheffer\\.conda\\envs\\bside_clean\\Lib\\site-packages run_CR.py
 
 # To compile executable file:
-# 1. Delete older files (build, _pycache_, CR_code, dist) from local paste
+# 1. Delete older files from local paste (build, _pycache_, CR_code, dist)
 # 2. Copy new "CR_code"  paste on local folder
-# 3. Add "." before "from formulas..." as from .formulas..." below in the "simulacao_carteira.py" file copy in the local folder
+# 3. Add "." before "from formulas..." as from .formulas..." below in the "simulacao_carteira_mfo.py" file copy in the local folder
 # 4. Comment main_code() line in the end of file to avoid double execution
 # 5. Check excel file_name
 # 6. Go to Anaconda Prompt (using the chosen environment >>"conda activate bside_clean") up to the local folder (>>cd [local address])
@@ -51,7 +51,7 @@ def main_code():
     print("Initiating simulation...") 
     print("Getting portfolio from Excel...")     
     
-    file_name = 'Carteira Recomendada - AAI.xlsm'
+    file_name = 'Carteira Recomendada - MFO.xlsm'
     
     #Using win32com.client:
     sheet_name = "Criação de Portfólio"
@@ -62,8 +62,8 @@ def main_code():
     date_first = ws.Range('Y2').Value
     date_last = ws.Range('Y3').Value
     benchmark = ws.Range('Y4').Value
-    amount = ws.Range('M3').Value
-    taxa_gestao = ws.Range('J3').Value
+    amount = ws.Range('O3').Value
+    taxa_gestao = ws.Range('L3').Value
     if taxa_gestao == None: taxa_gestao = 0
     
     date_first = pd.Timestamp(date_first.timestamp(), unit = 's')
@@ -94,7 +94,7 @@ def main_code():
     portfolio = portfolio.replace('', np.nan)
     portfolio = portfolio.dropna(how='all',subset = ['Ativo'], axis=0)
     portfolio.reset_index(inplace=True,drop=True)
-    portfolio['R$'] = portfolio['R$'].astype(float)
+    portfolio['R$ / $'] = portfolio['R$ / $'].astype(float)
     portfolio['% do PL'] = portfolio['% do PL'].astype(float)
     portfolio['% do PL'] = portfolio['% do PL'].astype(float)
     portfolio['Liquidez (D+)'] = portfolio['Liquidez (D+)'].replace(["-"], np.nan).astype(float)
@@ -116,7 +116,7 @@ def main_code():
             portfolio._set_value(i,'Classe', classe)
             portfolio._set_value(i,'Estratégia', estrategia)
             portfolio._set_value(i,'Estratégia', estrategia)
-    
+            
     # Adjust strategy names
     portfolio.loc[((portfolio['Classe']=='Renda Variável') & (portfolio['Estratégia'] == "Brasil")), 'Estratégia'] = 'RV Brasil'
     portfolio.loc[((portfolio['Classe']=='Renda Variável') & (portfolio['Estratégia'] == "Internacional")), 'Estratégia'] = 'RV Internacional'
@@ -124,8 +124,8 @@ def main_code():
     
     
     portfolio = portfolio[(portfolio['column_0'] != "x") & (portfolio['column_1'] != "x") & (portfolio['column_1'] != "y")]    
-             
-    portfolio = portfolio[['Ativo','CNPJ', 'R$', '% do PL', 'Benchmark', '% Benchmark', 'Benchmark +', 'Liquidez (D+)', 'Classe', 'Estratégia']]
+               
+    portfolio = portfolio[['Ativo','CNPJ', 'Veículo', 'R$ / $', '% do PL', 'Benchmark', '% Benchmark', 'Benchmark +', 'Liquidez (D+)', 'Classe', 'Estratégia']]
     
     portfolio_ativos = [sub.replace(' FIC', '').replace(' de ', ' ').replace(' LP', '').replace(' MM', '').replace(' Access', '')
                               .replace(' Feeder', '').replace(' FIA', '').replace(' FIM', '').replace(' FIM', '').replace(' RF', '')
@@ -147,7 +147,44 @@ def main_code():
     fund_prices.rename(columns=dict_CNPJ, inplace=True)
     new_columns = list(portfolio[((portfolio['CNPJ'] != "-") & (~portfolio['Ativo'].isin(list(fund_prices.columns))))]['Ativo'])
     fund_prices[[new_columns]] = np.nan
-    print("Done.")
+    
+    # Adjusting repeated assets in prices dataframe
+    fund_list = portfolio[(portfolio['CNPJ']!="-")]['Ativo']
+    fund_list1 = []
+    fund_list2 = []
+    for x in fund_list:
+        if x in fund_list1:
+            fund_list2.append(x)
+        if x not in fund_list:
+            fund_list1.append(x)
+    fund_prices2 = fund_prices.loc[:,fund_prices.columns.isin(fund_list2)]
+    fund_list2 = list(fund_prices2.columns)
+    fund_list2 = [x + " " for x in fund_list2]
+    fund_prices2.columns = fund_list2
+    
+    fund_prices = pd.concat([fund_prices2, fund_prices], axis = 1)
+    
+    # Adjusting repeated assets in portfolio dataframe
+    portfolio_list = portfolio['Ativo']
+    portfolio_list1 = []
+    portfolio_list2 = []
+    for x in portfolio_list:
+        if x in portfolio_list1:
+            portfolio_list2.append(x)
+        if x not in portfolio_list1:
+            portfolio_list1.append(x)
+            
+    portfolio2 = portfolio.loc[portfolio['Ativo'].isin(portfolio_list2), :]
+    portfolio2 = portfolio2.drop_duplicates(subset=["Ativo"], keep='last', inplace=False)
+    portfolio1 = portfolio.drop_duplicates(subset=["Ativo"], keep='first', inplace=False)
+    
+    portfolio_list2 = list(portfolio2['Ativo'])
+    portfolio_list2 = [x + " " for x in portfolio_list2]
+    portfolio2['Ativo'] = portfolio_list2
+    
+    portfolio = pd.concat([portfolio2, portfolio1], axis = 0)
+    
+    print("Done.")  
     
     print("Getting stock prices...")
     stock_prices = stock_prices_database(stocks_list, date_first - dt.timedelta(days=62), date_last) 
@@ -160,7 +197,6 @@ def main_code():
     ''' 4) MANIPULATE PORTFOLIO CATHEGORICAL COLUMNS ----------------------------------------------------------------------------------------------------------'''
     
     print("Getting fixed income rates...")
-    
     # FI Rates end benchmark
     portfolio.loc[((portfolio['Ativo'].str.contains('CDI', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'CDI'
     portfolio.loc[((portfolio['Ativo'].str.contains('SELIC', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'SELIC'
@@ -174,7 +210,6 @@ def main_code():
     
     portfolio = portfolio.drop(['Rates'], axis = 1)
     
-
     portfolio['Benchmark +'] = portfolio['Benchmark +'].fillna(0)
     portfolio['Benchmark +'] = portfolio['Benchmark +'].astype('str').str.rstrip('%').astype('float')
     portfolio['% Benchmark'] = portfolio['% Benchmark'].fillna(0)
@@ -334,7 +369,7 @@ def main_code():
     strategy_weights = pd.Series(data = strategy_list, index = strategy_list)
     strategy_weights = strategy_weights.apply(lambda x: portfolio[(portfolio['Estratégia'] == x)]['% do PL'].sum()).astype(float)
     
-    strategy_listAll = ['Pós-fixado', 'Pré-fixado', 'Inflação', 'RF Internacional', 'Macro', 'Descorrelacionados', 'RV Brasil', 'RV Internacional']  
+    strategy_listAll = ['Pós-fixado', 'Pré-fixado', 'Inflação', 'RF Internacional', 'Macro', 'Descorrelacionados', 'RV Brasil', 'RV Internacional']
     strategy_weightsAll = pd.Series(data = strategy_listAll, index = strategy_listAll)
     strategy_weightsAll = strategy_weightsAll.apply(lambda x: portfolio[(portfolio['Estratégia'] == x)]['% do PL'].sum()).astype(float)
         
@@ -366,7 +401,7 @@ def main_code():
     strategy_weightsAll.index = strategy_columns
     
     strategy_weights.index = [sub.replace('Pós-fixado', 'RF Pós').replace('Pré-fixado', 'RF Pré').replace('Inflação', 'RF Inlação')
-                                .replace('Macro', 'MM Macro').replace('Descorrelacionados', 'MM Descorrelacionados') for sub in strategy_list]
+                                .replace('Macro', 'MM Macro').replace('Descorrelacionados', 'MM Descorrelacionados') for sub in strategy_list]  
         
     # ASSET CLASSES
     class_list = list(portfolio['Classe'].unique())
@@ -406,6 +441,15 @@ def main_code():
     class_weights.index = [sub.replace('Renda Fixa', 'Renda Fixa (RF)').replace('Multimercado', 'Multimercado (MM)')
                      .replace('Renda Variável', 'Renda Variável (RV)') for sub in class_list]
     
+    # VEHICLE
+    vehicle = pd.Series(data = list(portfolio['Veículo'].unique()), index = list(portfolio['Veículo'].unique()))
+    vehicle = vehicle.apply(lambda x: portfolio[(portfolio['Veículo'] == x)]['% do PL'].sum()).astype(float)
+    
+    
+    vehicle_list = [sub.replace('F. Excl.', 'Fundo Exclusivo').replace('C. Adm.', 'Carteira Administrada')
+                     .replace('Offsh.', 'Offshore') for sub in list(vehicle.index)] 
+    vehicle.index = vehicle_list    
+        
     print("Done.")
     
     ''' 7) CALCULATE PERFORMANCE METRICS --------------------------------------------------------------------------------------------------------------------------------'''
@@ -601,16 +645,16 @@ def main_code():
         str(portf_vs_bench_6.iloc[0,7]) + ' até '+ date_last.strftime("%d/%m/%Y") + '(ainda não recuperou)'  
     
     if min(drawdown.iloc[:,1]) == 0: 
-            portf_vs_bench_6.iloc[1,5] = 0
-            portf_vs_bench_6.iloc[1,6] = "-"
-            portf_vs_bench_6.iloc[1,7] = "-"
+        portf_vs_bench_6.iloc[1,5] = 0
+        portf_vs_bench_6.iloc[1,6] = "-"
+        portf_vs_bench_6.iloc[1,7] = "-"
     else: 
-            portf_vs_bench_6.iloc[1,5] = min(drawdown.iloc[:,1])
-            portf_vs_bench_6.iloc[1,6] = list(drawdown[(drawdown.iloc[:,0] == min(drawdown.iloc[:,0]))].index.strftime('%d/%m/%Y'))[0]
-            aux_time_recover = drawdown[(drawdown.index >= drawdown[(drawdown.iloc[:,0] == min(drawdown.iloc[:,0]))].index[0])].iloc[:,1]
-            portf_vs_bench_6.iloc[1,7] == aux_time_recover[(aux_time_recover.index <= min(list(aux_time_recover[aux_time_recover == 0].index)))].count() -1
-            if (portf_vs_bench_6.iloc[1,7] == len(aux_time_recover) and aux_time_recover[-1] < 0): 
-                str(portf_vs_bench_6.iloc[1,7]) + ' até '+ date_last.strftime("%d/%m/%Y") + '(ainda não recuperou)' 
+        portf_vs_bench_6.iloc[1,5] = min(drawdown.iloc[:,1])
+        portf_vs_bench_6.iloc[1,6] = list(drawdown[(drawdown.iloc[:,0] == min(drawdown.iloc[:,0]))].index.strftime('%d/%m/%Y'))[0]
+        aux_time_recover = drawdown[(drawdown.index >= drawdown[(drawdown.iloc[:,0] == min(drawdown.iloc[:,0]))].index[0])].iloc[:,1]
+        portf_vs_bench_6.iloc[1,7] == aux_time_recover[(aux_time_recover.index <= min(list(aux_time_recover[aux_time_recover == 0].index)))].count() -1
+        if (portf_vs_bench_6.iloc[1,7] == len(aux_time_recover) and aux_time_recover[-1] < 0): 
+            str(portf_vs_bench_6.iloc[1,7]) + ' até '+ date_last.strftime("%d/%m/%Y") + '(ainda não recuperou)' 
             
     
     # Correlation Matrix
@@ -704,11 +748,12 @@ def main_code():
     sheet.range('5:18').clear_contents() # Delete old data
     sheet.range((5, 2)).value = class_weights
     sheet.range((5, 5)).value = strategy_weightsAll
-    sheet.range((5, 8)).value = class_weightsAll
+    sheet.range((5, 8)).value = vehicle
+    sheet.range((5, 11)).value = class_weightsAll
     
     print("Writing on Excel...(10/15)")
     # Write Portfolio and Benchmark Accumulated Returns:
-    output_sheet = 'AccReturns'     
+    output_sheet = 'AccReturns'        
     
     if not output_sheet in sNamList:
         sheet = wb.sheets.add(output_sheet)
