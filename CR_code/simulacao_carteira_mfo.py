@@ -44,6 +44,7 @@ sys.path.append(parent_path+'/CR_code/formulas')
 from  formulas.fund_prices_database import fund_prices_database
 from  formulas.benchmark_prices_database import benchmark_prices_database
 from  formulas.stock_prices_database import stock_prices_database
+from  formulas.fixed_income_prices_database import fixed_income_prices_database
 
 def main_code():
     
@@ -135,7 +136,9 @@ def main_code():
     portfolio['Ativo'] = portfolio_ativos
     
     dict_CNPJ = dict(zip(portfolio['CNPJ'], portfolio['Ativo']))
-    cnpj_list = list(portfolio[(portfolio['CNPJ']!="-")]['CNPJ'].to_numpy().flatten().astype(float))
+    
+    cnpj_list = list(portfolio[((portfolio['CNPJ']!="-") & (~portfolio['CNPJ'].str.startswith('BR').fillna(False)))]['CNPJ'].to_numpy().flatten().astype(float))   
+    fixedIncome_list = list(portfolio[((portfolio['CNPJ']!="-") & (portfolio['CNPJ'].str.startswith('BR')))]['CNPJ'])
     benchmark_list = ['CDI','SELIC', 'Ibovespa','IHFA','IPCA','IMA-B','IMA-B 5', 'PTAX', 'SP500', 'NASDAQ', 'Ouro', 'IFIX','Prévia IPCA', 'MSCI World', 'MSCI China']
     stocks_list = list(portfolio[((portfolio['CNPJ']=="-") & (portfolio['Ativo'].str.len()<=6))]['Ativo'].to_numpy().flatten())
     print("Done.")
@@ -143,9 +146,9 @@ def main_code():
     ''' 3) IMPORT FUND PRICES --------------------------------------------------------------------------------------'''
     
     print("Getting fund prices...")
-    fund_prices = fund_prices_database(cnpj_list, date_first - dt.timedelta(days=62), date_last) # -62 to be able to get IPCA values 
+    fund_prices = fund_prices_database(cnpj_list, date_first - dt.timedelta(days=5), date_last)
     fund_prices.rename(columns=dict_CNPJ, inplace=True)
-    new_columns = list(portfolio[((portfolio['CNPJ'] != "-") & (~portfolio['Ativo'].isin(list(fund_prices.columns))))]['Ativo'])
+    new_columns = list(portfolio[((portfolio['CNPJ'].isin(cnpj_list)) & (~portfolio['Ativo'].isin(list(fund_prices.columns))))]['Ativo'])
     fund_prices[[new_columns]] = np.nan
     
     # Adjusting repeated assets in prices dataframe
@@ -186,8 +189,17 @@ def main_code():
     
     print("Done.")  
     
+    print("Fixed income prices...")
+    fixedIncome_prices = fixed_income_prices_database(fixedIncome_list, date_first - dt.timedelta(days=5), date_last)
+    fixedIncome_prices.rename(columns=dict_CNPJ, inplace=True)
+    new_columns = list(portfolio[((portfolio['CNPJ'].isin(fixedIncome_list)) & (~portfolio['Ativo'].isin(list(fixedIncome_prices.columns))))]['Ativo'])
+    fixedIncome_prices[[new_columns]] = np.nan 
+    print("Done.")
+        
     print("Getting stock prices...")
-    stock_prices = stock_prices_database(stocks_list, date_first - dt.timedelta(days=62), date_last) 
+    stock_prices = stock_prices_database(stocks_list, date_first - dt.timedelta(days=5), date_last) 
+    new_columns = list(portfolio[((portfolio['CNPJ'].isin(stocks_list)) & (~portfolio['Ativo'].isin(list(stock_prices.columns))))]['Ativo'])
+    stock_prices[[new_columns]] = np.nan 
     print("Done.")
     
     print("Getting benchmark prices...")
@@ -228,6 +240,14 @@ def main_code():
     fund_Returns = fund_prices.astype('float') / fund_prices.astype('float').shift(1) - 1
     fund_Returns = fund_Returns.iloc[1:,:]
     fund_Returns = fund_Returns[((fund_Returns.index>=date_first) & (fund_Returns.index<=date_last))]
+    print("Done.")
+    
+    print("Calculating fixed income returns...")
+    # Fixed income daily returns:
+    fixedIncome_prices.fillna(method='ffill', inplace=True)
+    fixedIncome_Returns = fixedIncome_prices.astype('float') / fixedIncome_prices.astype('float').shift(1) - 1
+    fixedIncome_Returns = fixedIncome_Returns.iloc[1:,:]
+    fixedIncome_Returns = fixedIncome_Returns[((fixedIncome_Returns.index>=date_first) & (fixedIncome_Returns.index<=date_last))]
     print("Done.")
     
     print("Calculating stock returns...")
@@ -307,9 +327,10 @@ def main_code():
     
     # Get asset returns
     for i in assets_returns.columns:
-        if portfolio.loc[i,'CNPJ'] != "-": # Fund returns or Fixed-Income Mark-to-market
-            if i not in fund_Returns.columns:    
-               assets_returns[i] = fixedIncome_returns.loc[assets_returns.index, i] 
+        
+        if (portfolio.loc[i,'CNPJ'] != "-" and isinstance(portfolio.loc[i, 'CNPJ'], (float, int))) or (portfolio.loc[i,'CNPJ'] != "-" and isinstance(portfolio.loc[i, 'CNPJ'], str) and portfolio.loc[i, 'Veículo'] == 'F. Excl.'): # Fund returns or Fixed-Income Mark-to-market
+            if isinstance(portfolio.loc[i, 'CNPJ'], str): # If it is fixed income marked-to-market
+               assets_returns[i] = fixedIncome_Returns.loc[assets_returns.index, i] 
                if portfolio.loc[i,'Benchmark'] != "-":
                    assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
             else:

@@ -26,8 +26,6 @@ def benchmark_prices_database(benchmark_list, date_first, date_last):
     
     
     indices = pd.read_sql_query("SELECT * FROM Tbl_Indices", con=conn)
-    
-    indices = pd.read_sql_query("SELECT * FROM Tbl_Indices", con=conn)
         
     index_str = ''
     for i in list(indices.index):
@@ -43,7 +41,7 @@ def benchmark_prices_database(benchmark_list, date_first, date_last):
     values_index = values_index.pivot(index = 'DtRef', columns ='IdIndice' , values = 'Valor')
     
     #-30 to get the IPCA since the first date (monthly data) - these dates will be deleted after obtaining daily IPCA rates
-    date_first = date_first-dt.timedelta(days=30)
+    date_first = date_first-dt.timedelta(days=32)
     values_index = values_index[((values_index.index >= date_first) & (values_index.index <= date_last))]
     
     # Change IdIndice for index name
@@ -51,8 +49,5 @@ def benchmark_prices_database(benchmark_list, date_first, date_last):
     benchmark_names = list(values_index.columns)
     benchmark_names = [dict_map.get(item, item) for item in benchmark_names]
     values_index.columns = benchmark_names
-    
-    # Filter only funds needed
-    values_index = values_index.loc[:,values_index.columns.isin(benchmark_list)]
     
     return values_index
