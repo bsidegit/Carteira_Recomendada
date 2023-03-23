@@ -272,7 +272,6 @@ def main_code():
     
     # Get asset returns
     for i in assets_returns.columns:
-        
         if portfolio.loc[i,'CNPJ'] != "-": # Fund returns
             assets_returns[i] = fund_Returns.loc[assets_returns.index, i]
             
@@ -289,7 +288,13 @@ def main_code():
                 assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
             
         elif portfolio.loc[i, 'CNPJ']=="-" and portfolio.loc[i, 'CNPJ']=="-" and len(i)<=6: # Stock/listed funds prices
-            assets_returns[i] = stock_Returns.loc[assets_returns.index, i]
+            if i not in stock_Returns.columns: # 100% Benchmark returns
+                assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
+            else:
+                assets_returns[i] = stock_Returns.loc[assets_returns.index, i]
+                if portfolio.loc[i,'Benchmark'] != "-":
+                    assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
+        
             
         elif portfolio.loc[i,'% Benchmark'] != 0: # Fixed income % Benchmark returns
             assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']] * portfolio.loc[i,'% Benchmark']

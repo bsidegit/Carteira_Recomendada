@@ -307,9 +307,13 @@ def main_code():
     
     # Get asset returns
     for i in assets_returns.columns:
-        
-        if portfolio.loc[i,'CNPJ'] != "-": # Fund returns
-            assets_returns[i] = fund_Returns.loc[assets_returns.index, i]
+        if portfolio.loc[i,'CNPJ'] != "-": # Fund returns or Fixed-Income Mark-to-market
+            if i not in fund_Returns.columns:    
+               assets_returns[i] = fixedIncome_returns.loc[assets_returns.index, i] 
+               if portfolio.loc[i,'Benchmark'] != "-":
+                   assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
+            else:
+                assets_returns[i] = fund_Returns.loc[assets_returns.index, i]
             
             if portfolio.loc[i,'% Benchmark'] != 0: # Fund with % Benchmark proxy
                assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns[i].isna(), portfolio.loc[i,'Benchmark']] * portfolio.loc[i,'% Benchmark']
@@ -324,7 +328,13 @@ def main_code():
                 assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
             
         elif portfolio.loc[i, 'CNPJ']=="-" and portfolio.loc[i, 'CNPJ']=="-" and len(i)<=6: # Stock/listed funds prices
-            assets_returns[i] = stock_Returns.loc[assets_returns.index, i]
+            if i not in stock_Returns.columns: # 100% Benchmark returns
+                assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
+            else:
+                assets_returns[i] = stock_Returns.loc[assets_returns.index, i]
+                if portfolio.loc[i,'Benchmark'] != "-":
+                    assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
+        
             
         elif portfolio.loc[i,'% Benchmark'] != 0: # Fixed income % Benchmark returns
             assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']] * portfolio.loc[i,'% Benchmark']
@@ -826,220 +836,4 @@ def main_code():
     print("Completed.")
 
 main_code()
-
-
-
-
-''' TROUBLESHOOTING: --------------------------------------------------------------------------------------------------------------------------------
-            
-# Print Benchmark Prices:
-output_sheet = 'Bench Prices'        
-data = benchmark_prices_freeze
-
-if not output_sheet in sNamList:
-    sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-# Print Benchmark Returns:
-output_sheet = 'Bench Returns'        
-data = benchmark_Returns
-
-if not output_sheet in sNamList:
-    sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Funds Prices:
-output_sheet = 'Fund Prices'        
-data = fund_prices
-
-if not output_sheet in sNamList:  sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-# Print Funds Returns:
-output_sheet = 'Fund Returns'        
-data = fund_Returns
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Assets Returns:
-output_sheet = 'Assets Returns'        
-data = assets_returns
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Portfolio Returns:
-output_sheet = 'Portfolio Returns'        
-data = portfolio_return
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Portfolio Acc Returns:
-output_sheet = 'Portfolio AccReturns'        
-data = portfolio_acc
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Strategy Returns:
-output_sheet = 'Strategy Returns'        
-data = strategy_returns
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Strategy Acc Returns:
-output_sheet = 'Strategy AccReturns'        
-data = strategy_acc_W
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Class Returns:
-output_sheet = 'Class Returns'        
-data = class_returns
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Class Acc Returns:
-output_sheet = 'Class AccReturns'        
-data = class_acc_W
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Portfolio Volatility:
-output_sheet = 'Volatility'        
-data = volatility
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Portfolio Drawdown:
-output_sheet = 'Drawdown'        
-data = drawdown
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Portfolio vs Bench 1:
-output_sheet = 'Port_vs_Bench 1'        
-data = portf_vs_bench_1
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Portfolio vs Bench 2:
-output_sheet = 'Port_vs_Bench 2'        
-data = portf_vs_bench_2
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Portfolio vs Bench 3:
-output_sheet = 'Port_vs_Bench 3'        
-data = portf_vs_bench_3
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Portfolio vs Bench 4:
-output_sheet = 'Port_vs_Bench 4'        
-data = portf_vs_bench_4
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Portfolio vs Bench 5:
-output_sheet = 'Port_vs_Bench 5'        
-data = portf_vs_bench_5
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-
-# Print Portfolio vs Bench 6:
-output_sheet = 'Port_vs_Bench 6'        
-data = portf_vs_bench_6
-
-if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
-else: sheet = wb.sheets[output_sheet]
-
-sheet.clear_contents() # Delete old data
-sheet.range((2, 1)).value = data
-
-print("Completed.")
-'''
 
