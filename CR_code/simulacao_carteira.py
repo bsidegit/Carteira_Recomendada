@@ -143,7 +143,7 @@ def main_code():
     ''' 3) IMPORT FUND PRICES --------------------------------------------------------------------------------------'''
     
     print("Getting fund prices...")
-    fund_prices = fund_prices_database(cnpj_list, date_first - dt.timedelta(days=62), date_last) # -62 to be able to get IPCA values 
+    fund_prices = fund_prices_database(cnpj_list, date_first, date_last) # -62 to be able to get IPCA values 
     fund_prices.rename(columns=dict_CNPJ, inplace=True)
     new_columns = list(portfolio[((portfolio['CNPJ'] != "-") & (~portfolio['Ativo'].isin(list(fund_prices.columns))))]['Ativo'])
     fund_prices[[new_columns]] = np.nan
@@ -151,7 +151,7 @@ def main_code():
     
     if len(stocks_list)>0:
         print("Getting stock prices...")
-        stock_prices = stock_prices_database(stocks_list, date_first - dt.timedelta(days=62), date_last) 
+        stock_prices = stock_prices_database(stocks_list, date_first, date_last) 
         print("Done.")
     
     print("Getting benchmark prices...")
@@ -192,7 +192,7 @@ def main_code():
     # Fund daily returns:
     fund_prices.fillna(method='ffill', inplace=True)
     fund_Returns = fund_prices.astype('float') / fund_prices.astype('float').shift(1) - 1
-    fund_Returns = fund_Returns.iloc[1:,:]
+    fund_Returns = fund_Returns.iloc[0:1,:].fillna(0, inplace=True)
     fund_Returns = fund_Returns[((fund_Returns.index>=date_first) & (fund_Returns.index<=date_last))]
     print("Done.")
     
@@ -201,7 +201,7 @@ def main_code():
         # Stock daily returns:
         stock_prices.fillna(method='ffill', inplace=True)
         stock_Returns = stock_prices.astype('float') / stock_prices.astype('float').shift(1) - 1
-        stock_Returns = stock_Returns.iloc[1:,:]
+        stock_Returns = stock_Returns.iloc[0:1,:].fillna(0, inplace=True)
         stock_Returns = stock_Returns[((stock_Returns.index>=date_first) & (stock_Returns.index<=date_last))]
         print("Done.")
     
@@ -264,6 +264,7 @@ def main_code():
     benchmark_Returns = benchmark_Returns.drop(columns = ['IPCA_m/yyyy', 'Prévia IPCA_x', 'Prévia IPCA_y'])
     
     benchmark_Returns = benchmark_Returns[((benchmark_Returns.index>=date_first) & (benchmark_Returns.index<=fund_Returns.index[-1]))]
+    benchmark_Returns.iloc[0,:] = 0
     print("Done.")
     
     ''' 6) CALCULATE PORTFOLIO RETURNS --------------------------------------------------------------------------------------------------------------------------------'''
@@ -277,10 +278,10 @@ def main_code():
         if portfolio.loc[i,'CNPJ'] != "-": # Fund returns
             assets_returns[i] = fund_Returns.loc[assets_returns.index, i]
             
-            if portfolio.loc[i,'% Benchmark'] != 0: # Fund with % Benchmark proxy
+            if not np.isnan(portfolio.loc[i, '% Benchmark']): # Fund with % Benchmark proxy
                assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns[i].isna(), portfolio.loc[i,'Benchmark']] * portfolio.loc[i,'% Benchmark']
             
-            elif portfolio.loc[i,'Benchmark +'] != None:
+            elif not np.isnan(portfolio.loc[i, 'Benchmark +']):
                 if portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None: # Fund with Benchmark+ proxy
                     assets_returns.loc[assets_returns[i].isna(), i] = (1+benchmark_Returns.loc[assets_returns[i].isna(), portfolio.loc[i,'Benchmark']]) * ((1+portfolio.loc[i,'Benchmark +'])**(1/252)) - 1
                 else: # Fund with prefixed proxy
@@ -298,10 +299,10 @@ def main_code():
                     assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
         
             
-        elif portfolio.loc[i,'% Benchmark'] != None: # Fixed income % Benchmark returns
+        elif not np.isnan(portfolio.loc[i, '% Benchmark']): # Fixed income % Benchmark returns
             assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']] * portfolio.loc[i,'% Benchmark']
         
-        elif portfolio.loc[i,'Benchmark +'] != None:
+        elif not np.isnan(portfolio.loc[i, 'Benchmark +']):
             if portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None: # Fixed income Benchmark+ returns
                 assets_returns[i] = (1+benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]) * ((1+portfolio.loc[i,'Benchmark +'])**(1/252)) - 1
             
