@@ -525,7 +525,7 @@ def main_code():
     portf_vs_bench_1.iloc[1,3] = (portf_vs_bench_1.iloc[1,1] - (((benchmark_Returns['CDI']+1).to_numpy().prod())**(252/benchmark_Returns.shape[0])-1)) / portf_vs_bench_1.iloc[1,2]
     
     # Portfolio vs. Benchmark: Returns
-    portf_vs_bench_2 = pd.DataFrame(columns = ["Mes", "Ano", "6 meses", "12 meses", "2 anos", "Saldo Inicial ("+date_first.strftime("%d/%m/%Y")+")", "Saldo Final ("+date_last.strftime("%d/%m/%Y")+")"],
+    portf_vs_bench_2 = pd.DataFrame(columns = ["Mes", "Ano", "6 meses", "12 meses", "2 anos", "Saldo Inicial ("+date_first.strftime("%d/%m/%Y")+")", "Saldo Final ("+portfolio_acc.index[-1].strftime("%d/%m/%Y")+")"],
                                       index = ["Portfólio Sugerido", benchmark])
     
     date_MTD = dt.date(portfolio_return.index[-1].year, portfolio_return.index[-1].month, 1)
