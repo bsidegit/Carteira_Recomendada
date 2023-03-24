@@ -149,9 +149,10 @@ def main_code():
     fund_prices[[new_columns]] = np.nan
     print("Done.")
     
-    print("Getting stock prices...")
-    stock_prices = stock_prices_database(stocks_list, date_first - dt.timedelta(days=62), date_last) 
-    print("Done.")
+    if len(stocks_list)>0:
+        print("Getting stock prices...")
+        stock_prices = stock_prices_database(stocks_list, date_first - dt.timedelta(days=62), date_last) 
+        print("Done.")
     
     print("Getting benchmark prices...")
     benchmark_prices = benchmark_prices_database(benchmark_list, date_first - dt.timedelta(days=62), date_last) 
@@ -159,31 +160,31 @@ def main_code():
     
     ''' 4) MANIPULATE PORTFOLIO CATHEGORICAL COLUMNS ----------------------------------------------------------------------------------------------------------'''
     
-    print("Getting fixed income rates...")
+    if portfolio[((portfolio['CNPJ']=="-"))].shape[0] - len(stocks_list) > 0:
+        print("Getting fixed income rates...")
+        # FI Rates end benchmark
+        portfolio.loc[((portfolio['Ativo'].str.contains('CDI', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'CDI'
+        portfolio.loc[((portfolio['Ativo'].str.contains('SELIC', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'SELIC'
+        portfolio.loc[((portfolio['Ativo'].str.contains('IPCA', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'IPCA'
+        portfolio.loc[((portfolio['Ativo'].str.contains('IMA-B', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'IMA-B'
+        portfolio.loc[((portfolio['Ativo'].str.contains('USD', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'PTAX'
+        
+        portfolio['Rates'] = portfolio['Ativo'].str.split(r"(",expand=True)[1].str.replace("CDI","").str.replace("SELIC","").str.replace("IPCA","").str.replace("IMA-B","").str.replace("IMAB","").str.replace("USD","").str.replace(" ","").str.replace(")","").str.replace("+","")
+        portfolio.loc[((portfolio['Ativo'].str.contains(' CDI', regex=True) | portfolio['Ativo'].str.contains(' SELIC', regex=True)) & (portfolio['CNPJ'] == "-")),'% Benchmark'] = portfolio[((portfolio['Ativo'].str.contains(' CDI', regex=True) | portfolio['Ativo'].str.contains(' SELIC', regex=True)) & (portfolio['CNPJ'] == "-"))]['Rates']
+        portfolio.loc[((portfolio['CNPJ'] == "-") & (portfolio['% Benchmark'].isna())), 'Benchmark +'] = portfolio[((~portfolio['Ativo'].str.contains(' CDI', regex=True)) & (portfolio['CNPJ'] == "-"))]['Rates']
+        
+        portfolio = portfolio.drop(['Rates'], axis = 1)
+        
     
-    # FI Rates end benchmark
-    portfolio.loc[((portfolio['Ativo'].str.contains('CDI', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'CDI'
-    portfolio.loc[((portfolio['Ativo'].str.contains('SELIC', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'SELIC'
-    portfolio.loc[((portfolio['Ativo'].str.contains('IPCA', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'IPCA'
-    portfolio.loc[((portfolio['Ativo'].str.contains('IMA-B', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'IMA-B'
-    portfolio.loc[((portfolio['Ativo'].str.contains('USD', regex=True)) & (portfolio['CNPJ'] == "-")), 'Benchmark'] = 'PTAX'
-    
-    portfolio['Rates'] = portfolio['Ativo'].str.split(r"(",expand=True)[1].str.replace("CDI","").str.replace("SELIC","").str.replace("IPCA","").str.replace("IMA-B","").str.replace("IMAB","").str.replace("USD","").str.replace(" ","").str.replace(")","").str.replace("+","")
-    portfolio.loc[((portfolio['Ativo'].str.contains(' CDI', regex=True) | portfolio['Ativo'].str.contains(' SELIC', regex=True)) & (portfolio['CNPJ'] == "-")),'% Benchmark'] = portfolio[((portfolio['Ativo'].str.contains(' CDI', regex=True) | portfolio['Ativo'].str.contains(' SELIC', regex=True)) & (portfolio['CNPJ'] == "-"))]['Rates']
-    portfolio.loc[((portfolio['CNPJ'] == "-") & (portfolio['% Benchmark'].isna())), 'Benchmark +'] = portfolio[((~portfolio['Ativo'].str.contains(' CDI', regex=True)) & (portfolio['CNPJ'] == "-"))]['Rates']
-    
-    portfolio = portfolio.drop(['Rates'], axis = 1)
-    
-
-    portfolio['Benchmark +'] = portfolio['Benchmark +'].fillna(0)
-    portfolio['Benchmark +'] = portfolio['Benchmark +'].astype('str').str.rstrip('%').astype('float')
-    portfolio['% Benchmark'] = portfolio['% Benchmark'].fillna(0)
-    portfolio['% Benchmark'] = portfolio['% Benchmark'].astype('str').str.rstrip('%').astype('float')
-    portfolio['Benchmark'] = portfolio['Benchmark'].fillna("-")
-    
-    portfolio.loc[(portfolio['CNPJ'] == "-"),'Benchmark +'] = portfolio.loc[(portfolio['CNPJ'] == "-"),'Benchmark +'] / 100
-    portfolio.loc[(portfolio['CNPJ'] == "-"),'% Benchmark'] = portfolio.loc[(portfolio['CNPJ'] == "-"),'% Benchmark'] / 100
-    print("Done.")
+        portfolio['Benchmark +'] = portfolio['Benchmark +'].fillna(0)
+        portfolio['Benchmark +'] = portfolio['Benchmark +'].astype('str').str.rstrip('%').astype('float')
+        portfolio['% Benchmark'] = portfolio['% Benchmark'].fillna(0)
+        portfolio['% Benchmark'] = portfolio['% Benchmark'].astype('str').str.rstrip('%').astype('float')
+        portfolio['Benchmark'] = portfolio['Benchmark'].fillna("-")
+        
+        portfolio.loc[(portfolio['CNPJ'] == "-"),'Benchmark +'] = portfolio.loc[(portfolio['CNPJ'] == "-"),'Benchmark +'] / 100
+        portfolio.loc[(portfolio['CNPJ'] == "-"),'% Benchmark'] = portfolio.loc[(portfolio['CNPJ'] == "-"),'% Benchmark'] / 100
+        print("Done.")
     
     ''' 5) GET ASSETS AND BENCHMARKS DAILY RETURNS --------------------------------------------------------------------------------------------------------------------------------'''
     
@@ -195,13 +196,14 @@ def main_code():
     fund_Returns = fund_Returns[((fund_Returns.index>=date_first) & (fund_Returns.index<=date_last))]
     print("Done.")
     
-    print("Calculating stock returns...")
-    # Stock daily returns:
-    stock_prices.fillna(method='ffill', inplace=True)
-    stock_Returns = stock_prices.astype('float') / stock_prices.astype('float').shift(1) - 1
-    stock_Returns = stock_Returns.iloc[1:,:]
-    stock_Returns = stock_Returns[((stock_Returns.index>=date_first) & (stock_Returns.index<=date_last))]
-    print("Done.")
+    if len(stocks_list)>0:
+        print("Calculating stock returns...")
+        # Stock daily returns:
+        stock_prices.fillna(method='ffill', inplace=True)
+        stock_Returns = stock_prices.astype('float') / stock_prices.astype('float').shift(1) - 1
+        stock_Returns = stock_Returns.iloc[1:,:]
+        stock_Returns = stock_Returns[((stock_Returns.index>=date_first) & (stock_Returns.index<=date_last))]
+        print("Done.")
     
     print("Calculating benchmark returns...")
     # Delete weekends and Brazilian holidays
@@ -278,36 +280,36 @@ def main_code():
             if portfolio.loc[i,'% Benchmark'] != 0: # Fund with % Benchmark proxy
                assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns[i].isna(), portfolio.loc[i,'Benchmark']] * portfolio.loc[i,'% Benchmark']
             
-            elif portfolio.loc[i,'Benchmark +'] != 0:
-                if portfolio.loc[i,'Benchmark'] != "-": # Fund with Benchmark+ proxy
+            elif portfolio.loc[i,'Benchmark +'] != None:
+                if portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None: # Fund with Benchmark+ proxy
                     assets_returns.loc[assets_returns[i].isna(), i] = (1+benchmark_Returns.loc[assets_returns[i].isna(), portfolio.loc[i,'Benchmark']]) * ((1+portfolio.loc[i,'Benchmark +'])**(1/252)) - 1
                 else: # Fund with prefixed proxy
                     assets_returns.loc[assets_returns[i].isna(), i] = (1+portfolio.loc[i,'Benchmark +'])**(1/252) - 1
             
-            elif portfolio.loc[i,'Benchmark'] != "-": # 100% Benchmark returns
+            elif portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None: # 100% Benchmark returns
                 assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
             
-        elif portfolio.loc[i, 'CNPJ']=="-" and portfolio.loc[i, 'CNPJ']=="-" and len(i)<=6: # Stock/listed funds prices
+        elif portfolio.loc[i, 'CNPJ']=="-" and len(i)<=6: # Stock/listed funds prices
             if i not in stock_Returns.columns: # 100% Benchmark returns
                 assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
             else:
                 assets_returns[i] = stock_Returns.loc[assets_returns.index, i]
-                if portfolio.loc[i,'Benchmark'] != "-":
+                if  portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None:
                     assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
         
             
-        elif portfolio.loc[i,'% Benchmark'] != 0: # Fixed income % Benchmark returns
+        elif portfolio.loc[i,'% Benchmark'] != None: # Fixed income % Benchmark returns
             assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']] * portfolio.loc[i,'% Benchmark']
         
-        elif portfolio.loc[i,'Benchmark +'] != 0:
-            if portfolio.loc[i,'Benchmark'] != "-": # Fixed income Benchmark+ returns
+        elif portfolio.loc[i,'Benchmark +'] != None:
+            if portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None: # Fixed income Benchmark+ returns
                 assets_returns[i] = (1+benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]) * ((1+portfolio.loc[i,'Benchmark +'])**(1/252)) - 1
             
             else: # Fixed income prefixed returns
                 assets_returns[i] = (1+portfolio.loc[i,'Benchmark +'])**(1/252) - 1
         
-        elif portfolio.loc[i,'Benchmark'] != "-": # 100% Benchmark returns
-            assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]      
+        elif  portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None: # 100% Benchmark returns
+            assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]           
         
     
     # Get weighted performance for each asset
@@ -696,7 +698,7 @@ def main_code():
     sheet.range((48, 2)).value = class_perf_attr
     
     print("Writing on Excel...(8/15)")
-    sheet.range((58, 2)).value = strategy_perf_attr
+    sheet.range((57, 2)).value = strategy_perf_attr
     
     
     print("Writing on Excel...(9/15)")
