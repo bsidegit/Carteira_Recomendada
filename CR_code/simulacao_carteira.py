@@ -192,7 +192,7 @@ def main_code():
     # Fund daily returns:
     fund_prices.fillna(method='ffill', inplace=True)
     fund_Returns = fund_prices.astype('float') / fund_prices.astype('float').shift(1) - 1
-    fund_Returns = fund_Returns.iloc[0:1,:].fillna(0, inplace=True)
+    fund_Returns.iloc[0:1,:].fillna(0, inplace=True)
     fund_Returns = fund_Returns[((fund_Returns.index>=date_first) & (fund_Returns.index<=date_last))]
     print("Done.")
     
@@ -274,6 +274,9 @@ def main_code():
     print("Calculating portfolio returns...")
     
     # Get asset returns
+    portfolio['% Benchmark'] = pd.to_numeric(portfolio['% Benchmark'], errors='coerce')
+    portfolio['Benchmark +'] = pd.to_numeric(portfolio['Benchmark +'], errors='coerce')
+    
     for i in assets_returns.columns:
         if portfolio.loc[i,'CNPJ'] != "-": # Fund returns
             assets_returns[i] = fund_Returns.loc[assets_returns.index, i]

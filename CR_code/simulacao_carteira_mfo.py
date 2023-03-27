@@ -337,6 +337,9 @@ def main_code():
     print("Calculating portfolio returns...")
     
     # Get asset returns
+    portfolio['% Benchmark'] = pd.to_numeric(portfolio['% Benchmark'], errors='coerce')
+    portfolio['Benchmark +'] = pd.to_numeric(portfolio['Benchmark +'], errors='coerce')
+    
     for i in assets_returns.columns:
         
         if (portfolio.loc[i,'CNPJ'] != "-" and isinstance(portfolio.loc[i, 'CNPJ'], (float, int))) or (portfolio.loc[i,'CNPJ'] != "-" and isinstance(portfolio.loc[i, 'CNPJ'], str) and portfolio.loc[i, 'Veículo'] == 'F. Excl.'): # Fund returns or Fixed-Income Mark-to-market
