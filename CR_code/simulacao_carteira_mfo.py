@@ -214,6 +214,10 @@ def main_code():
     
     ''' 4) MANIPULATE PORTFOLIO CATHEGORICAL COLUMNS ----------------------------------------------------------------------------------------------------------'''
     
+    portfolio['Benchmark +'] = portfolio['Benchmark +'].fillna(0)
+    portfolio['% Benchmark'] = portfolio['% Benchmark'].fillna(0)
+    portfolio['Benchmark'] = portfolio['Benchmark'].fillna("-")
+    
     if portfolio[((portfolio['CNPJ']=="-"))].shape[0] - len(stocks_list) > 0:
         print("Getting fixed income rates...")
         # FI Rates end benchmark
@@ -225,16 +229,17 @@ def main_code():
         
         portfolio['Rates'] = portfolio['Ativo'].str.split(r"(",expand=True)[1].str.replace("CDI","").str.replace("SELIC","").str.replace("IPCA","").str.replace("IMA-B","").str.replace("IMAB","").str.replace("USD","").str.replace(" ","").str.replace(")","").str.replace("+","")
         portfolio.loc[((portfolio['Ativo'].str.contains(' CDI', regex=True) | portfolio['Ativo'].str.contains(' SELIC', regex=True)) & (portfolio['CNPJ'] == "-")),'% Benchmark'] = portfolio[((portfolio['Ativo'].str.contains(' CDI', regex=True) | portfolio['Ativo'].str.contains(' SELIC', regex=True)) & (portfolio['CNPJ'] == "-"))]['Rates']
-        portfolio.loc[((portfolio['CNPJ'] == "-") & (portfolio['% Benchmark'].isna())), 'Benchmark +'] = portfolio[((~portfolio['Ativo'].str.contains(' CDI', regex=True)) & (portfolio['CNPJ'] == "-"))]['Rates']
+        portfolio.loc[((portfolio['CNPJ'] == "-") & portfolio['% Benchmark'] == 0), 'Benchmark +'] = portfolio[((~portfolio['Ativo'].str.contains(' CDI', regex=True)) & (portfolio['CNPJ'] == "-"))]['Rates']
         
         portfolio = portfolio.drop(['Rates'], axis = 1)
         
         portfolio['Benchmark +'] = portfolio['Benchmark +'].fillna(0)
-        portfolio['Benchmark +'] = portfolio['Benchmark +'].astype('str').str.rstrip('%').astype('float')
         portfolio['% Benchmark'] = portfolio['% Benchmark'].fillna(0)
-        portfolio['% Benchmark'] = portfolio['% Benchmark'].astype('str').str.rstrip('%').astype('float')
         portfolio['Benchmark'] = portfolio['Benchmark'].fillna("-")
         
+        portfolio['Benchmark +'] = portfolio['Benchmark +'].astype('str').str.rstrip('%').astype('float')
+        portfolio['% Benchmark'] = portfolio['% Benchmark'].astype('str').str.rstrip('%').astype('float')
+                
         portfolio.loc[(portfolio['CNPJ'] == "-"),'Benchmark +'] = portfolio.loc[(portfolio['CNPJ'] == "-"),'Benchmark +'] / 100
         portfolio.loc[(portfolio['CNPJ'] == "-"),'% Benchmark'] = portfolio.loc[(portfolio['CNPJ'] == "-"),'% Benchmark'] / 100
         print("Done.")
@@ -345,21 +350,21 @@ def main_code():
         if (portfolio.loc[i,'CNPJ'] != "-" and isinstance(portfolio.loc[i, 'CNPJ'], (float, int))) or (portfolio.loc[i,'CNPJ'] != "-" and isinstance(portfolio.loc[i, 'CNPJ'], str) and portfolio.loc[i, 'Veículo'] == 'F. Excl.'): # Fund returns or Fixed-Income Mark-to-market
             if isinstance(portfolio.loc[i, 'CNPJ'], str): # If it is fixed income marked-to-market
                assets_returns[i] = fixedIncome_Returns.loc[assets_returns.index, i] 
-               if portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None:
+               if portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != 0:
                    assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
             else:
                 assets_returns[i] = fund_Returns.loc[assets_returns.index, i]
             
-            if not np.isnan(portfolio.loc[i, '% Benchmark']): # Fund with % Benchmark proxy
+            if portfolio.loc[i, '% Benchmark'] != 0: # Fund with % Benchmark proxy
                assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns[i].isna(), portfolio.loc[i,'Benchmark']] * portfolio.loc[i,'% Benchmark']
             
-            elif not np.isnan(portfolio.loc[i, 'Benchmark +']):
-                if portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None: # Fund with Benchmark+ proxy
+            elif portfolio.loc[i, 'Benchmark +'] != 0:
+                if portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != 0: # Fund with Benchmark+ proxy
                     assets_returns.loc[assets_returns[i].isna(), i] = (1+benchmark_Returns.loc[assets_returns[i].isna(), portfolio.loc[i,'Benchmark']]) * ((1+portfolio.loc[i,'Benchmark +'])**(1/252)) - 1
                 else: # Fund with prefixed proxy
                     assets_returns.loc[assets_returns[i].isna(), i] = (1+portfolio.loc[i,'Benchmark +'])**(1/252) - 1
             
-            elif portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None: # 100% Benchmark returns
+            elif portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != 0: # 100% Benchmark returns
                 assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
             
         elif portfolio.loc[i, 'CNPJ']=="-" and len(i)<=6: # Stock/listed funds prices
@@ -367,21 +372,21 @@ def main_code():
                 assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
             else:
                 assets_returns[i] = stock_Returns.loc[assets_returns.index, i]
-                if  portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None:
+                if  portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != 0:
                     assets_returns.loc[assets_returns[i].isna(), i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]
         
             
-        elif not np.isnan(portfolio.loc[i, '% Benchmark']): # Fixed income % Benchmark returns
+        elif portfolio.loc[i, '% Benchmark'] != 0: # Fixed income % Benchmark returns
             assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']] * portfolio.loc[i,'% Benchmark']
         
-        elif not np.isnan(portfolio.loc[i, 'Benchmark +']):
-            if portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None: # Fixed income Benchmark+ returns
+        elif portfolio.loc[i, 'Benchmark +'] != 0:
+            if portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != 0: # Fixed income Benchmark+ returns
                 assets_returns[i] = (1+benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]) * ((1+portfolio.loc[i,'Benchmark +'])**(1/252)) - 1
             
             else: # Fixed income prefixed returns
                 assets_returns[i] = (1+portfolio.loc[i,'Benchmark +'])**(1/252) - 1
         
-        elif  portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != None: # 100% Benchmark returns
+        elif  portfolio.loc[i,'Benchmark'] != "-" and portfolio.loc[i,'Benchmark'] != 0: # 100% Benchmark returns
             assets_returns[i] = benchmark_Returns.loc[assets_returns.index, portfolio.loc[i,'Benchmark']]      
         
     
@@ -435,7 +440,7 @@ def main_code():
         strategy_attr.iloc[i+1,:] =  strategy_returns.iloc[i+1,:] * (1 + portfolio_acc.iloc[i,0])
     
     
-    strategy_columns = [sub.replace('Pós-fixado', 'RF Pós').replace('Pré-fixado', 'RF Pré').replace('Inflação', 'RF Inlação').replace('RF Internacional', 'RF Intl.')
+    strategy_columns = [sub.replace('Pós-fixado', 'RF Pós').replace('Pré-fixado', 'RF Pré').replace('Inflação', 'RF Inflação').replace('RF Internacional', 'RF Intl.')
                                 .replace('Macro', 'MM Macro').replace('Descorrelacionados', 'MM Descorr.').replace('RV Brasil', 'RV BR')
                                 .replace('RV Internacional', 'RV Intl.') for sub in strategy_listAll]      
     
@@ -445,7 +450,7 @@ def main_code():
     
     strategy_weightsAll.index = strategy_columns
     
-    strategy_weights.index = [sub.replace('Pós-fixado', 'RF Pós').replace('Pré-fixado', 'RF Pré').replace('Inflação', 'RF Inlação')
+    strategy_weights.index = [sub.replace('Pós-fixado', 'RF Pós').replace('Pré-fixado', 'RF Pré').replace('Inflação', 'RF Inflação')
                                 .replace('Macro', 'MM Macro').replace('Descorrelacionados', 'MM Descorrelacionados') for sub in strategy_list]  
         
     # ASSET CLASSES
