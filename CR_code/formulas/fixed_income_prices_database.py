@@ -32,7 +32,7 @@ def fixed_income_prices_database(fixedIncome_list, date_first, date_last):
             
     fixedIncome_str = fixedIncome_str[:-3]
         
-    str_query = "SELECT * FROM Tbl_PrecosRF WHERE ("+fixedIncome_str+") ORDER BY DtRef ASC"
+    str_query = "SELECT [IdAtivo] ,[DtRef] ,[Preco] ,[Taxa] ,[Fonte] FROM Tbl_PrecosRF WHERE ("+fixedIncome_str+") ORDER BY DtRef ASC"
 
     values_fixedIncome = pd.read_sql_query(str_query, con=conn)
 
