@@ -60,9 +60,10 @@ def main_code():
         wb = excel.Workbooks(file_name)
         ws = wb.Worksheets(sheet_name)
         flag_MFO = 1
+        print("Reading 'Carteira Recomendada - MFO.xlsm'.")
         # File is already open
-    except Exception as e:
-        print(f"The file '{file_name}' is not open. Opening 'Carteira Recomendada - AAI.xlsm' instead.")
+    except Exception:
+        print("Reading 'Carteira Recomendada - AAI.xlsm'.")
         file_name = 'Carteira Recomendada - AAI.xlsm'
         excel = win32com.client.gencache.EnsureDispatch("Excel.Application")
         wb = excel.Workbooks(file_name)
@@ -73,6 +74,14 @@ def main_code():
     date_last = ws.Range('X3').Value
     benchmark = ws.Range('X4').Value
     amount = ws.Range('N3').Value
+    try:
+        amount = float(amount)
+    except ValueError:
+        try:
+            amount = float(amount.replace(',', '.'))
+        except ValueError:
+            pass
+        
     if flag_MFO == 1:
         taxa_gestao = ws.Range('N4').Value
     
@@ -132,8 +141,11 @@ def main_code():
     
     
     portfolio = portfolio[(portfolio['column_0'] != "x") & (portfolio['column_1'] != "x") & (portfolio['column_1'] != "y")]    
-               
-    portfolio = portfolio[['Ativo','CNPJ', 'Veículo', 'R$ / $', '% do PL', 'Benchmark', '% Benchmark', 'Benchmark +', 'Liquidez/ Duration', 'Classe', 'Estratégia']]
+    
+    if flag_MFO == 1:
+        portfolio = portfolio[['Ativo','CNPJ', 'Veículo', 'R$ / $', '% do PL', 'Benchmark', '% Benchmark', 'Benchmark +', 'Liquidez/ Duration', 'Classe', 'Estratégia']]
+    else:           
+        portfolio = portfolio[['Ativo','CNPJ', 'Custódia', 'R$ / $', '% do PL', 'Benchmark', '% Benchmark', 'Benchmark +', 'Liquidez/ Duration', 'Classe', 'Estratégia']]
     
     portfolio_ativos = [sub.replace(' FIC', '').replace(' de ', ' ').replace(' LP', '').replace(' MM', '').replace(' Access', '')
                               .replace(' Feeder', '').replace(' FIA', '').replace(' FIM', '').replace(' FIM', '').replace(' RF', '')
@@ -144,15 +156,17 @@ def main_code():
     
     dict_CNPJ = dict(zip(portfolio['CNPJ'], portfolio['Ativo']))
     
-    resposta = input("Gostaria de utilizar marcação a mercado para títulos públicos? (S/N): ")
-    if resposta.lower() == 's':
-        flag_fixedIncome_MtM = 1
-    elif resposta.lower() == 'n':
+    if flag_MFO == 1:
+        resposta = input("Gostaria de utilizar marcação a mercado para títulos públicos? (S/N): ")
+        if resposta.lower() == 's':
+            flag_fixedIncome_MtM = 1
+        elif resposta.lower() == 'n':
+            flag_fixedIncome_MtM = 0
+        else:
+            print("Resposta inválida. Por favor, responda com 'S' para Sim ou 'N' para Não.")
+    else: 
         flag_fixedIncome_MtM = 0
-    else:
-        print("Resposta inválida. Por favor, responda com 'S' para Sim ou 'N' para Não.")
-        
-
+              
     ID_ativos = portfolio[((portfolio['CNPJ']!="-"))]['CNPJ']
     cnpj_list = []
     fixedIncome_list = []
@@ -169,9 +183,8 @@ def main_code():
     #cnpj_list = cnpj_list.to_numpy().flatten().astype(float)
 
     benchmark_list = portfolio['Benchmark'].dropna().unique().tolist()
-    for indice in ['CDI', 'IPCA', 'Prévia IPCA','SP500', 'SELIC', 'IBOV']:
-        if indice not in benchmark_list:
-            benchmark_list.append(indice)
+    additional_list = ['CDI', 'IPCA', 'Prévia IPCA', 'SELIC', 'Ibovespa']
+    benchmark_list = list(set(benchmark_list + additional_list))
     
     additional_benchmarks = portfolio['Benchmark'].dropna().unique().tolist() # Add values from portfolio['Benchmark']
 
@@ -184,50 +197,51 @@ def main_code():
     
     ''' 3) IMPORT FUND PRICES --------------------------------------------------------------------------------------'''
     
-    print("Getting fund prices...")
-    fund_prices = fund_prices_database(cnpj_list, date_first - dt.timedelta(days=5), date_last + dt.timedelta(days=5))
-    fund_prices.rename(columns=dict_CNPJ, inplace=True)
-    new_columns = list(portfolio[((portfolio['CNPJ'].isin(cnpj_list)) & (~portfolio['Ativo'].isin(list(fund_prices.columns))))]['Ativo'])
-    fund_prices[[new_columns]] = np.nan
-    
-    # Adjusting repeated assets in prices dataframe
-    fund_list = portfolio[(portfolio['CNPJ']!="-")]['Ativo']
-    fund_list1 = []
-    fund_list2 = []
-    for x in fund_list:
-        if x in fund_list1:
-            fund_list2.append(x)
-        if x not in fund_list:
-            fund_list1.append(x)
-    fund_prices2 = fund_prices.loc[:,fund_prices.columns.isin(fund_list2)]
-    fund_list2 = list(fund_prices2.columns)
-    fund_list2 = [x + " " for x in fund_list2]
-    fund_prices2.columns = fund_list2
-    
-    fund_prices = pd.concat([fund_prices2, fund_prices], axis = 1)
-    
-    # Adjusting repeated assets in portfolio dataframe
-    portfolio_list = portfolio['Ativo']
-    portfolio_list1 = []
-    portfolio_list2 = []
-    for x in portfolio_list:
-        if x in portfolio_list1:
-            portfolio_list2.append(x)
-        if x not in portfolio_list1:
-            portfolio_list1.append(x)
-            
-    portfolio2 = portfolio.loc[portfolio['Ativo'].isin(portfolio_list2), :]
-    portfolio2 = portfolio2.drop_duplicates(subset=["Ativo"], keep='last', inplace=False)
-    portfolio1 = portfolio.drop_duplicates(subset=["Ativo"], keep='first', inplace=False)
-    
-    portfolio_list2 = list(portfolio2['Ativo'])
-    portfolio_list2 = [x + " " for x in portfolio_list2]
-    portfolio2['Ativo'] = portfolio_list2
-    
-    portfolio = pd.concat([portfolio2, portfolio1], axis = 0)
-    
-    print("Done.")  
-    
+    if len(cnpj_list) > 0:
+        print("Getting fund prices...")
+        fund_prices = fund_prices_database(cnpj_list, date_first - dt.timedelta(days=5), date_last + dt.timedelta(days=5))
+        fund_prices.rename(columns=dict_CNPJ, inplace=True)
+        new_columns = list(portfolio[((portfolio['CNPJ'].isin(cnpj_list)) & (~portfolio['Ativo'].isin(list(fund_prices.columns))))]['Ativo'])
+        fund_prices[[new_columns]] = np.nan
+        
+        # Adjusting repeated assets in prices dataframe
+        fund_list = portfolio[(portfolio['CNPJ']!="-")]['Ativo']
+        fund_list1 = []
+        fund_list2 = []
+        for x in fund_list:
+            if x in fund_list1:
+                fund_list2.append(x)
+            if x not in fund_list:
+                fund_list1.append(x)
+        fund_prices2 = fund_prices.loc[:,fund_prices.columns.isin(fund_list2)]
+        fund_list2 = list(fund_prices2.columns)
+        fund_list2 = [x + " " for x in fund_list2]
+        fund_prices2.columns = fund_list2
+        
+        fund_prices = pd.concat([fund_prices2, fund_prices], axis = 1)
+        
+        # Adjusting repeated assets in portfolio dataframe
+        portfolio_list = portfolio['Ativo']
+        portfolio_list1 = []
+        portfolio_list2 = []
+        for x in portfolio_list:
+            if x in portfolio_list1:
+                portfolio_list2.append(x)
+            if x not in portfolio_list1:
+                portfolio_list1.append(x)
+                
+        portfolio2 = portfolio.loc[portfolio['Ativo'].isin(portfolio_list2), :]
+        portfolio2 = portfolio2.drop_duplicates(subset=["Ativo"], keep='last', inplace=False)
+        portfolio1 = portfolio.drop_duplicates(subset=["Ativo"], keep='first', inplace=False)
+        
+        portfolio_list2 = list(portfolio2['Ativo'])
+        portfolio_list2 = [x + " " for x in portfolio_list2]
+        portfolio2['Ativo'] = portfolio_list2
+        
+        portfolio = pd.concat([portfolio2, portfolio1], axis = 0)
+        
+        print("Done.")  
+        
     if flag_fixedIncome_MtM != 0 and len(fixedIncome_list)>0:
         print("NTN-B prices...")
         fixedIncome_prices = fixed_income_prices_database(fixedIncome_list, date_first - dt.timedelta(days=5), date_last + dt.timedelta(days=5))
@@ -248,6 +262,8 @@ def main_code():
     print("Done.")
     
     ''' 4) MANIPULATE PORTFOLIO CATHEGORICAL COLUMNS ----------------------------------------------------------------------------------------------------------'''
+    
+    print("Completing proxy columns...")
     
     portfolio['Benchmark +'] = portfolio['Benchmark +'].fillna(0)
     portfolio['% Benchmark'] = portfolio['% Benchmark'].fillna(0)
@@ -285,14 +301,14 @@ def main_code():
 
     ''' 5) GET ASSETS AND BENCHMARKS DAILY RETURNS --------------------------------------------------------------------------------------------------------------------------------'''
     
-    print("Calculating fund returns...")
-    # Fund daily returns:
-    fund_prices.fillna(method='ffill', inplace=True)
-    fund_Returns = fund_prices.astype('float') / fund_prices.astype('float').shift(1) - 1
-    fund_Returns.iloc[0:1,:].fillna(0, inplace=True)
-    fund_Returns = fund_Returns[((fund_Returns.index>=date_first) & (fund_Returns.index<=date_last))]
-    print(fund_prices)
-    print("Done.")
+    if len(cnpj_list) > 0:
+        print("Calculating fund returns...")
+        # Fund daily returns:
+        fund_prices.fillna(method='ffill', inplace=True)
+        fund_Returns = fund_prices.astype('float') / fund_prices.astype('float').shift(1) - 1
+        fund_Returns.iloc[0:1,:].fillna(0, inplace=True)
+        fund_Returns = fund_Returns[((fund_Returns.index>=date_first) & (fund_Returns.index<=date_last))]
+        print("Done.")
     
     if flag_fixedIncome_MtM == 1:
         print("Calculating fixed income returns...")
@@ -315,7 +331,6 @@ def main_code():
     print("Calculating benchmark returns...")
     # Delete weekends and Brazilian holidays
     benchmark_prices.loc[:,'IPCA'].fillna(method='ffill', inplace=True)
-    benchmark_prices.loc[:,'SP500'].fillna(method='ffill', inplace=True)
     benchmark_prices = benchmark_prices[(~benchmark_prices['CDI'].isna())]
     # Fill empty prices (different calendars)
     benchmark_prices.fillna(method='ffill', inplace=True)
@@ -370,7 +385,7 @@ def main_code():
     benchmark_Returns.fillna(method='ffill', inplace=True)
     benchmark_Returns = benchmark_Returns.drop(columns = ['IPCA_m/yyyy', 'Prévia IPCA_x', 'Prévia IPCA_y'])
     
-    benchmark_Returns = benchmark_Returns[((benchmark_Returns.index>=date_first) & (benchmark_Returns.index<=fund_Returns.index[-1]))]
+    benchmark_Returns = benchmark_Returns[((benchmark_Returns.index>=date_first) & (benchmark_Returns.index<=date_last))]
     benchmark_Returns.iloc[0,:] = 0
     print("Done.")
     
@@ -388,8 +403,9 @@ def main_code():
 
     for asset in assets_returns.columns:
     # Check if the asset is in fund_Returns
-        if asset in fund_Returns.columns:
-            assets_returns[asset] = fund_Returns.loc[assets_returns.index, asset]
+        if len(cnpj_list)>0:    
+            if asset in fund_Returns.columns:
+                assets_returns[asset] = fund_Returns.loc[assets_returns.index, asset]
 
         elif len(stocks_list)>0:
             if asset in stock_Returns.columns: # Fixed income prices if MtM is being used
@@ -411,7 +427,10 @@ def main_code():
                 assets_returns.loc[assets_returns[asset].isna(), asset] = (1+benchmark_Returns.loc[assets_returns[asset].isna(), portfolio.loc[asset,'Benchmark']]) * ((1+portfolio.loc[asset,'Benchmark +'])**(1/252)) - 1
             else: # Fund with prefixed proxy
                 assets_returns.loc[assets_returns[asset].isna(), asset] = (1+portfolio.loc[asset,'Benchmark +'])**(1/252) - 1
-
+                
+        elif portfolio.loc[asset, 'Benchmark'] != "-": # Fund with 100% Benchmark proxy
+            assets_returns.loc[assets_returns[asset].isna(), asset] = benchmark_Returns.loc[assets_returns[asset].isna(), portfolio.loc[asset,'Benchmark']]
+    
 
     # Get weighted performance for each asset
     assets_returns_W = assets_returns.copy()
@@ -514,14 +533,18 @@ def main_code():
     class_weights.index = [sub.replace('Renda Fixa', 'Renda Fixa (RF)').replace('Multimercado', 'Multimercado (MM)')
                      .replace('Renda Variável', 'Renda Variável (RV)') for sub in class_list]
     
-    # VEHICLE
-    vehicle = pd.Series(data = list(portfolio['Veículo'].unique()), index = list(portfolio['Veículo'].unique()))
-    vehicle = vehicle.apply(lambda x: portfolio[(portfolio['Veículo'] == x)]['% do PL'].sum()).astype(float)
-    
-    
-    vehicle_list = [sub.replace('F. Excl.', 'Fundo Exclusivo').replace('C. Adm.', 'Carteira Administrada')
-                     .replace('Offsh.', 'Offshore') for sub in list(vehicle.index)] 
-    vehicle.index = vehicle_list    
+    # VEHICLE CUSTODY
+    if flag_MFO == 1:
+        vehicle = pd.Series(data = list(portfolio['Veículo'].unique()), index = list(portfolio['Veículo'].unique()))
+        vehicle = vehicle.apply(lambda x: portfolio[(portfolio['Veículo'] == x)]['% do PL'].sum()).astype(float)
+        vehicle_list = [sub.replace('F. Excl.', 'Fundo Exclusivo').replace('C. Adm.', 'Carteira Administrada')
+                         .replace('Offsh.', 'Offshore') for sub in list(vehicle.index)] 
+        
+        vehicle.index = vehicle_list 
+    else:
+        vehicle = pd.Series(data = list(portfolio['Custódia'].unique()), index = list(portfolio['Custódia'].unique()))
+        vehicle = vehicle.apply(lambda x: portfolio[(portfolio['Custódia'] == x)]['% do PL'].sum()).astype(float)
+       
         
     print("Done.")
     
@@ -757,7 +780,7 @@ def main_code():
     # Correlation Matrix
     asset_group = [benchmark]
     for j in assets_returns.columns:
-        if portfolio.loc[j,'CNPJ']!="-" or np.std(assets_returns[j])*np.sqrt(252)>0.01:
+        if portfolio.loc[j,'CNPJ'] in cnpj_list or np.std(assets_returns[j])*np.sqrt(252) > 0.01:
             asset_group = asset_group + [j]
             
     assets_returns2 = pd.concat([assets_returns, benchmark_Returns[benchmark]], axis=1)
@@ -804,6 +827,8 @@ def main_code():
         sheet = wb.sheets.add(output_sheet)
     else: sheet = wb.sheets[output_sheet]
     
+    sheet.api.Unprotect('Alohomora')
+    
     print("Writing on Excel...(1/15)")
     sheet.range('4:6').clear_contents() # Delete old data
     sheet.range((4, 2)).value = portf_vs_bench_1
@@ -834,6 +859,7 @@ def main_code():
     print("Writing on Excel...(8/15)")
     sheet.range((58, 2)).value = strategy_perf_attr
     
+    sheet.api.Protect('Alohomora')
     
     print("Writing on Excel...(9/15)")
     # Write Total per Class, Strategy and Vehicle:
@@ -842,11 +868,15 @@ def main_code():
         sheet = wb.sheets.add(output_sheet)
     else: sheet = wb.sheets[output_sheet]
     
+    sheet.api.Unprotect('Alohomora')
+    
     sheet.range('5:18').clear_contents() # Delete old data
     sheet.range((5, 2)).value = class_weights
     sheet.range((5, 5)).value = strategy_weightsAll
     sheet.range((5, 8)).value = vehicle
     sheet.range((5, 11)).value = class_weightsAll
+    
+    sheet.api.Protect('Alohomora')
     
     print("Writing on Excel...(10/15)")
     # Write Portfolio and Benchmark Accumulated Returns:
@@ -856,8 +886,12 @@ def main_code():
         sheet = wb.sheets.add(output_sheet)
     else: sheet = wb.sheets[output_sheet]
     
+    sheet.api.Unprotect('Alohomora')
+    
     sheet.clear_contents() # Delete old data
     sheet.range((2, 2)).value = portfolio_acc
+    
+    sheet.api.Protect('Alohomora')
     
     print("Writing on Excel...(11/15)")
     # Write Volatility Moving Windows:
@@ -868,8 +902,12 @@ def main_code():
         sheet = wb.sheets.add(output_sheet)
     else: sheet = wb.sheets[output_sheet]
     
+    sheet.api.Unprotect('Alohomora')
+    
     sheet.clear_contents() # Delete old data
     sheet.range((2, 2)).value = data
+    
+    sheet.api.Protect('Alohomora')
     
     print("Writing on Excel...(12/15)")
     # Write Correlation Matrix:
@@ -880,8 +918,12 @@ def main_code():
         sheet = wb.sheets.add(output_sheet)
     else: sheet = wb.sheets[output_sheet]
     
+    sheet.api.Unprotect('Alohomora')
+    
     sheet.range('4:40').clear_contents() 
     sheet.range((6, 2)).value = data
+    
+    sheet.api.Protect('Alohomora')
     
     print("Writing on Excel...(13/15)")
     # Write Drawdown:
@@ -892,8 +934,12 @@ def main_code():
         sheet = wb.sheets.add(output_sheet)
     else: sheet = wb.sheets[output_sheet]
     
+    sheet.api.Unprotect('Alohomora')
+    
     sheet.clear_contents() # Delete old data
     sheet.range((2, 2)).value = data
+    
+    sheet.api.Protect('Alohomora')
     
     print("Writing on Excel...(14/15)")
     # Write Assets Returns:
@@ -903,8 +949,12 @@ def main_code():
     if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
     else: sheet = wb.sheets[output_sheet]
     
+    sheet.api.Unprotect('Alohomora')
+    
     sheet.clear_contents() # Delete old data
     sheet.range((2, 1)).value = data
+    
+    sheet.api.Protect('Alohomora')
     
     print("Writing on Excel...(15/15)")
     # Write Strategy Acc Returns:
@@ -914,9 +964,12 @@ def main_code():
     if not output_sheet in sNamList: sheet = wb.sheets.add(output_sheet)
     else: sheet = wb.sheets[output_sheet]
     
+    sheet.api.Unprotect('Alohomora')
+    
     sheet.clear_contents() # Delete old data
     sheet.range((2, 1)).value = data
     
+    sheet.api.Protect('Alohomora')
     
     wb.app.calculation = 'automatic'
     
