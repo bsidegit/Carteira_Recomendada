@@ -13,9 +13,9 @@ def benchmark_prices_database(benchmark_list, date_first, date_last):
 
     ''' 1) SET UP DATA BASE CONNECTOR ----------------------------------------------------------------------------'''
 
-    server = 'bside-srv.database.windows.net'
+    server = 'bswm-db.database.windows.net'
     database = 'bswm'
-    username = 'bside-sa'
+    username = 'bswm-sa'
     password = 'BatataPalha123!'   
     driver= '{ODBC Driver 18 for SQL Server}'
     
