@@ -16,7 +16,7 @@ Esta versão é uma refatoração modularizada do `simulacao_carteira.py`. O obj
 
 ### 3. `simulacao_carteira_(bill).py`
 
-Esta versão foi desenvolvida para integrar o código com a planilha 'Carteira Recomendada - Bill'. Baseando-nos na estrutura modular do `simulacao_carteira_(new).py`, ajustamos o código para utilizar dados específicos da nova planilha e garantir que os cálculos e resultados fossem consistentes com os fornecidos anteriormente pela 'Carteira Recomendada - MFO'.
+Esta versão foi desenvolvida para integrar o código com a planilha 'Carteira Recomendada - Bill'. Baseando-nos na estrutura modular do `simulacao_carteira_(new).py`, ajustamos o código para utilizar dados específicos da nova planilha e garantir que os cálculos e resultados fossem consistentes com os fornecidos anteriormente pela 'Carteira Recomendada - MFO'. É importante destacar que, para o funcionamento do código, o usuário preencha a coluna 'BENCH' com o Benchmark desejado para todos os ativos. 
 
 ## Implementações Futuras
 
