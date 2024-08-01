@@ -589,16 +589,16 @@ def main_code():
     date_12M = portfolio_return.index[-1] - relativedelta(months=12)
     date_24M = portfolio_return.index[-1] - relativedelta(months=24)
     
-    portf_vs_bench_2.iloc[0,0] = (1+portfolio_return[(pd.to_datetime(portfolio_return.index).date > date_MTD)]).to_numpy().prod() - 1
-    portf_vs_bench_2.iloc[1,0] = (1+benchmark_Returns[(pd.to_datetime(benchmark_Returns.index).date > date_MTD)][benchmark]).to_numpy().prod() - 1
-    portf_vs_bench_2.iloc[0,1] = (1+portfolio_return[(pd.to_datetime(portfolio_return.index).date > date_YTD)]).to_numpy().prod() - 1
-    portf_vs_bench_2.iloc[1,1] = (1+benchmark_Returns[(pd.to_datetime(benchmark_Returns.index).date >date_YTD)][benchmark]).to_numpy().prod() - 1
-    portf_vs_bench_2.iloc[0,2] = (1+portfolio_return[(portfolio_return.index > pd.Timestamp(date_6M))]).to_numpy().prod() - 1
-    portf_vs_bench_2.iloc[1,2] = (1+benchmark_Returns[(benchmark_Returns.index > pd.Timestamp(date_6M))][benchmark]).to_numpy().prod() - 1
-    portf_vs_bench_2.iloc[0,3] = (1+portfolio_return[(portfolio_return.index > pd.Timestamp(date_12M))]).to_numpy().prod() - 1
-    portf_vs_bench_2.iloc[1,3] = (1+benchmark_Returns[(benchmark_Returns.index > pd.Timestamp(date_12M))][benchmark]).to_numpy().prod() - 1
-    portf_vs_bench_2.iloc[0,4] = (1+portfolio_return[(portfolio_return.index > pd.Timestamp(date_24M))]).to_numpy().prod() - 1
-    portf_vs_bench_2.iloc[1,4] = (1+benchmark_Returns[(benchmark_Returns.index > pd.Timestamp(date_24M))][benchmark]).to_numpy().prod() - 1
+    portf_vs_bench_2.iloc[0,0] = (1+portfolio_return[(pd.to_datetime(portfolio_return.index).date >= date_MTD)]).to_numpy().prod() - 1
+    portf_vs_bench_2.iloc[1,0] = (1+benchmark_Returns[(pd.to_datetime(benchmark_Returns.index).date >= date_MTD)][benchmark]).to_numpy().prod() - 1
+    portf_vs_bench_2.iloc[0,1] = (1+portfolio_return[(pd.to_datetime(portfolio_return.index).date >= date_YTD)]).to_numpy().prod() - 1
+    portf_vs_bench_2.iloc[1,1] = (1+benchmark_Returns[(pd.to_datetime(benchmark_Returns.index).date >= date_YTD)][benchmark]).to_numpy().prod() - 1
+    portf_vs_bench_2.iloc[0,2] = (1+portfolio_return[(portfolio_return.index >= pd.Timestamp(date_6M))]).to_numpy().prod() - 1
+    portf_vs_bench_2.iloc[1,2] = (1+benchmark_Returns[(benchmark_Returns.index >= pd.Timestamp(date_6M))][benchmark]).to_numpy().prod() - 1
+    portf_vs_bench_2.iloc[0,3] = (1+portfolio_return[(portfolio_return.index >= pd.Timestamp(date_12M))]).to_numpy().prod() - 1
+    portf_vs_bench_2.iloc[1,3] = (1+benchmark_Returns[(benchmark_Returns.index >= pd.Timestamp(date_12M))][benchmark]).to_numpy().prod() - 1
+    portf_vs_bench_2.iloc[0,4] = (1+portfolio_return[(portfolio_return.index >= pd.Timestamp(date_24M))]).to_numpy().prod() - 1
+    portf_vs_bench_2.iloc[1,4] = (1+benchmark_Returns[(benchmark_Returns.index >= pd.Timestamp(date_24M))][benchmark]).to_numpy().prod() - 1
     portf_vs_bench_2.iloc[0,5] = amount
     portf_vs_bench_2.iloc[1,5] = amount
     portf_vs_bench_2.iloc[0,6] = amount * (1+portfolio_acc.iloc[-1,0])
